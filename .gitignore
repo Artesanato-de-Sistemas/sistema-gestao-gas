@@ -1,0 +1,33 @@
+# Gradle
+.gradle/
+build/
+
+# IntelliJ
+.idea/
+*.iml
+
+# VSCode
+.vscode/
+
+# Logs
+*.log
+
+# Env
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Java
+out/
+
+# Generated
+bin/
+
+# Linux
+*~
+
+# Application secrets
+application-local.yml

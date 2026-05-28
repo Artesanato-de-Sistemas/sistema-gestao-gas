@@ -136,7 +136,7 @@ export default function App() {
               </span>
               {!isSidebarCollapsed && (
                 <div className="flex flex-col animate-fadeIn">
-                  <span className="font-bold text-xs tracking-tight text-gray-900 leading-tight">GásGestão</span>
+                  <span className="font-bold text-xs tracking-tight text-gray-900 leading-tight">Botijas</span>
                   <span className="text-[8px] uppercase tracking-wider text-brand-taupe font-extrabold leading-none">Admin Pro</span>
                 </div>
               )}

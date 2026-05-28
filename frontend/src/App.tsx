@@ -194,7 +194,7 @@ export default function App() {
               <div className="p-3 flex items-center justify-between border-b border-gray-200">
                 <div className="flex items-center space-x-2">
                   <span className="p-1.5 bg-brand-green text-white rounded-md font-bold font-sans text-xs">Gg</span>
-                  <span className="font-bold text-xs tracking-tight text-gray-900">GásGestão</span>
+                  <span className="font-bold text-xs tracking-tight text-gray-900">Botijas</span>
                 </div>
                 <button
                   onClick={() => setIsMobileOpen(false)}

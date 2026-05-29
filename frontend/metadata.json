@@ -1,6 +1,0 @@
-{
-  "name": "GásGestão",
-  "description": "Sistema operacional e gerencial de estoque, entregas e controle de vasilhames para distribuidoras de gás.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

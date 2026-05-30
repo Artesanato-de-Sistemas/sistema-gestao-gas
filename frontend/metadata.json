@@ -1,0 +1,6 @@
+{
+  "name": "Império do Gás",
+  "description": "ERP para gestão de estoque e vendas de uma distribuidora de vasilhames.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

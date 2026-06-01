@@ -1,11 +1,11 @@
 spring:
-    datasource:
-      url: jdbc:postgresql://db.mhxycuagyraepaxmpekg.supabase.co:5432/postgres
-      username: postgres
-      password: fagocitose!
-    jpa:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/postgres
+    username: postgres
+    password: corinthians10
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
       hibernate:
-        ddl-auto: update
-      properties:
-        hibernate:
-          dialect: org.hibernate.dialect.PostgreSQL.Dialect
+        dialect: org.hibernate.dialect.PostgreSQLDialect

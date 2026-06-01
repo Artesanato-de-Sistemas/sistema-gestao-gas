@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
+import { Card, Select, Table, Typography, Row, Col, Space, Avatar } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import { DriverFinancialReport } from '@/types';
 import { formatCurrency } from '@/utils/formatters';
 import { UserCircle, TrendingDown, TrendingUp, DollarSign, BarChart3 } from 'lucide-react';
+
+const { Title, Text } = Typography;
 
 const mockDrivers: DriverFinancialReport[] = [
   { driverId: '1', driverName: 'Roberto Silva', cylindersSold: 45, grossAmount: 4950, withdrawals: 150, netProfit: 4800 },
@@ -22,121 +22,128 @@ export function DriversDashboard() {
   const totalWithdrawals = mockDrivers.reduce((acc, d) => acc + d.withdrawals, 0);
   const totalNet = mockDrivers.reduce((acc, d) => acc + d.netProfit, 0);
 
+  const columns: ColumnsType<DriverFinancialReport> = [
+    {
+      title: 'Entregador',
+      key: 'driverName',
+      render: (_, record) => (
+        <div className="flex items-center gap-3">
+          <Avatar className="bg-orange-50 text-orange-700 border border-orange-100 font-bold" size="default">
+             {record.driverName.substring(0, 2).toUpperCase()}
+          </Avatar>
+          <span className="font-medium text-slate-800">{record.driverName}</span>
+        </div>
+      )
+    },
+    {
+      title: 'Vendas (Qtd)',
+      dataIndex: 'cylindersSold',
+      key: 'cylindersSold',
+      align: 'right',
+      render: (val) => <span className="font-medium text-slate-700">{val}</span>
+    },
+    {
+      title: 'Total Bruto',
+      dataIndex: 'grossAmount',
+      key: 'grossAmount',
+      align: 'right',
+      render: (val) => <span className="text-slate-700">{formatCurrency(val)}</span>
+    },
+    {
+      title: 'Sangria',
+      dataIndex: 'withdrawals',
+      key: 'withdrawals',
+      align: 'right',
+      render: (val) => <span className="text-orange-600 font-medium">{formatCurrency(val)}</span>
+    },
+    {
+      title: 'Lucro Real',
+      dataIndex: 'netProfit',
+      key: 'netProfit',
+      align: 'right',
+      render: (val) => <span className="font-bold text-emerald-600">{formatCurrency(val)}</span>
+    }
+  ];
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-800 flex items-center gap-2">
-             <BarChart3 className="w-6 h-6 text-blue-600" />
+          <h2 className="text-2xl font-bold tracking-tight text-slate-800 flex items-center gap-2 m-0">
+             <BarChart3 className="w-6 h-6 text-orange-500" />
              Performance de Entregadores
           </h2>
-          <p className="text-slate-500 mt-1">Acompanhamento financeiro (DRE) e vendas por entregador.</p>
+          <p className="text-slate-500 mt-1 mb-0">Acompanhamento financeiro (DRE) e vendas por entregador.</p>
         </div>
         
         <div className="flex items-center gap-3">
           <span className="text-sm font-medium text-slate-600">Período:</span>
-          <Select value={period} onValueChange={setPeriod}>
-            <SelectTrigger className="w-[180px] bg-white rounded-xl shadow-sm border-slate-200">
-              <SelectValue placeholder="Selecione o período" />
-            </SelectTrigger>
-            <SelectContent className="rounded-xl">
-              <SelectItem value="Hoje">Hoje</SelectItem>
-              <SelectItem value="Semana">Esta Semana</SelectItem>
-              <SelectItem value="Mês">Este Mês</SelectItem>
-            </SelectContent>
-          </Select>
+          <Select 
+            value={period} 
+            onChange={setPeriod}
+            className="w-[180px] h-9"
+            options={[
+              { value: 'Hoje', label: 'Hoje' },
+              { value: 'Semana', label: 'Esta Semana' },
+              { value: 'Mês', label: 'Este Mês' }
+            ]}
+          />
         </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="shadow-sm border-slate-100 rounded-2xl bg-white">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between space-y-0 pb-2">
-              <p className="text-sm font-medium text-slate-500">Total de Botijões</p>
-              <div className="p-2 bg-blue-50 rounded-xl">
-                <UserCircle className="w-4 h-4 text-blue-600" />
+        <Card className="shadow-sm border-slate-100 rounded-2xl bg-white" styles={{ body: { padding: '24px' } }}>
+            <div className="flex items-center justify-between pb-2">
+              <span className="text-sm font-medium text-slate-500">Total de Botijões</span>
+              <div className="p-2 bg-orange-50 rounded-xl">
+                <UserCircle className="w-4 h-4 text-orange-500" />
               </div>
             </div>
             <div className="text-3xl font-bold text-slate-800 mt-2">{totalCylinders}</div>
-          </CardContent>
         </Card>
-        <Card className="shadow-sm border-slate-100 rounded-2xl bg-white">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between space-y-0 pb-2">
-              <p className="text-sm font-medium text-slate-500">Valor Bruto</p>
+        <Card className="shadow-sm border-slate-100 rounded-2xl bg-white" styles={{ body: { padding: '24px' } }}>
+            <div className="flex items-center justify-between pb-2">
+              <span className="text-sm font-medium text-slate-500">Valor Bruto</span>
               <div className="p-2 bg-slate-50 rounded-xl">
                 <TrendingUp className="w-4 h-4 text-slate-600" />
               </div>
             </div>
             <div className="text-3xl font-bold text-slate-800 mt-2">{formatCurrency(totalGross)}</div>
-          </CardContent>
         </Card>
-        <Card className="shadow-sm border-slate-100 rounded-2xl bg-white">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between space-y-0 pb-2">
-              <p className="text-sm font-medium text-slate-500">Sangria (Vales)</p>
-              <div className="p-2 bg-orange-50 rounded-xl">
-                <TrendingDown className="w-4 h-4 text-orange-500" />
+        <Card className="shadow-sm border-slate-100 rounded-2xl bg-white" styles={{ body: { padding: '24px' } }}>
+            <div className="flex items-center justify-between pb-2">
+              <span className="text-sm font-medium text-slate-500">Sangria (Vales)</span>
+              <div className="p-2 bg-red-50 rounded-xl">
+                <TrendingDown className="w-4 h-4 text-red-500" />
               </div>
             </div>
-            <div className="text-3xl font-bold text-orange-600 mt-2">-{formatCurrency(totalWithdrawals)}</div>
-          </CardContent>
+            <div className="text-3xl font-bold text-red-600 mt-2">-{formatCurrency(totalWithdrawals)}</div>
         </Card>
-        <Card className="shadow-sm border-slate-100 rounded-2xl bg-emerald-50/20">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between space-y-0 pb-2">
-              <p className="text-sm font-medium text-slate-500">Lucro Real Líquido</p>
+        <Card className="shadow-sm border-slate-100 rounded-2xl bg-emerald-50/20" styles={{ body: { padding: '24px' } }}>
+            <div className="flex items-center justify-between pb-2">
+              <span className="text-sm font-medium text-slate-500">Lucro Real Líquido</span>
               <div className="p-2 bg-emerald-100 rounded-xl">
                 <DollarSign className="w-4 h-4 text-emerald-600" />
               </div>
             </div>
             <div className="text-3xl font-bold text-emerald-600 mt-2">{formatCurrency(totalNet)}</div>
-          </CardContent>
         </Card>
       </div>
 
-      <Card className="shadow-sm border-slate-100 rounded-2xl">
-        <CardHeader className="pb-4 border-b border-slate-50">
-          <CardTitle className="text-slate-800">Detalhamento por Entregador</CardTitle>
-          <CardDescription>
+      <Card className="shadow-sm border-slate-100 rounded-2xl" styles={{ body: { padding: '24px' } }}>
+        <div className="p-6 border-b border-slate-50">
+          <h3 className="text-lg font-semibold text-slate-800 m-0">Detalhamento por Entregador</h3>
+          <p className="text-sm text-slate-500 mt-1 m-0">
             Resultados consolidados filtrados por {period.toLowerCase()}.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader className="bg-slate-50/50">
-                <TableRow className="border-slate-100 hover:bg-transparent">
-                  <TableHead className="font-semibold text-slate-600 pl-6 h-12">Entregador</TableHead>
-                  <TableHead className="text-right font-semibold text-slate-600 h-12">Vendas (Qtd)</TableHead>
-                  <TableHead className="text-right font-semibold text-slate-600 h-12">Total Bruto</TableHead>
-                  <TableHead className="text-right font-semibold text-slate-600 h-12">Sangria</TableHead>
-                  <TableHead className="text-right font-semibold text-slate-600 pr-6 h-12">Lucro Real</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {mockDrivers.map((driver) => (
-                  <TableRow key={driver.driverId} className="hover:bg-slate-50/50 border-slate-100 transition-colors">
-                    <TableCell className="font-medium text-slate-800 flex items-center gap-3 pl-6 py-4">
-                        <div className="w-9 h-9 rounded-full bg-blue-50 flex items-center justify-center text-blue-700 text-xs font-bold border border-blue-100">
-                            {driver.driverName.substring(0, 2).toUpperCase()}
-                        </div>
-                        {driver.driverName}
-                    </TableCell>
-                    <TableCell className="text-right font-medium text-slate-700 py-4">{driver.cylindersSold}</TableCell>
-                    <TableCell className="text-right text-slate-700 py-4">{formatCurrency(driver.grossAmount)}</TableCell>
-                    <TableCell className="text-right text-orange-600 font-medium py-4">
-                      {formatCurrency(driver.withdrawals)}
-                    </TableCell>
-                    <TableCell className="text-right font-bold text-emerald-600 pr-6 py-4">
-                      {formatCurrency(driver.netProfit)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
+          </p>
+        </div>
+        <Table
+          columns={columns}
+          dataSource={mockDrivers}
+          rowKey="driverId"
+          pagination={false}
+          className="w-full"
+        />
       </Card>
     </div>
   );

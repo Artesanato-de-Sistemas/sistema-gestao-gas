@@ -1,13 +1,9 @@
 import { Box, MapPin, AlertTriangle, TrendingUp } from 'lucide-react';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, Typography, Row, Col } from 'antd';
 import { formatCurrency } from '@/utils/formatters';
 import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+
+const { Title, Text } = Typography;
 
 const mockNeighborhoodData = [
   { name: 'Centro', orders: 120 },
@@ -34,24 +30,24 @@ export function Dashboard() {
       value: '245',
       subtitle: 'Unidades disponíveis',
       icon: Box,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-50',
+      color: 'text-orange-500',
+      bgColor: 'bg-orange-50',
     },
     {
       title: 'Estoque P45',
       value: '18',
       subtitle: 'Unidades disponíveis',
       icon: Box,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-50',
+      color: 'text-orange-500',
+      bgColor: 'bg-orange-50',
     },
     {
       title: 'Vendas do Dia',
       value: formatCurrency(1850),
       subtitle: '24 pedidos finalizados',
       icon: TrendingUp,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-50',
+      color: 'text-orange-500',
+      bgColor: 'bg-orange-50',
     },
     {
       title: 'Inadimplência',
@@ -66,41 +62,41 @@ export function Dashboard() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-slate-800">Dashboard</h2>
-        <p className="text-slate-500">Visão geral do desempenho e logística da distribuidora.</p>
+        <h2 className="text-2xl font-bold tracking-tight text-slate-800 m-0">Dashboard</h2>
+        <p className="text-slate-500 mt-1 mb-0">Visão geral do desempenho e logística da distribuidora.</p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         {metrics.map((metric, index) => (
-          <Card key={index} className="shadow-sm border-slate-100 rounded-2xl">
-            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-sm font-medium text-slate-500">
+          <Card key={index} className="shadow-sm border-slate-100 rounded-2xl" styles={{ body: { padding: '24px' } }}>
+            <div className="flex flex-row items-center justify-between pb-2">
+              <span className="text-sm font-medium text-slate-500">
                 {metric.title}
-              </CardTitle>
+              </span>
               <div className={`p-2 rounded-xl ${metric.bgColor}`}>
                 <metric.icon className={`w-4 h-4 ${metric.color}`} />
               </div>
-            </CardHeader>
-            <CardContent>
+            </div>
+            <div>
               <div className="text-3xl font-bold text-slate-800">{metric.value}</div>
-              <p className="text-sm text-slate-400 mt-1">{metric.subtitle}</p>
-            </CardContent>
+              <p className="text-sm text-slate-400 mt-1 m-0">{metric.subtitle}</p>
+            </div>
           </Card>
         ))}
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
-        <Card className="col-span-1 lg:col-span-4 shadow-sm border-slate-100 rounded-2xl">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-slate-800">
-              <MapPin className="w-5 h-5 text-blue-600" />
+        <Card className="col-span-1 lg:col-span-4 shadow-sm border-slate-100 rounded-2xl" styles={{ body: { padding: '24px' } }}>
+          <div className="mb-6">
+            <h3 className="text-lg font-semibold flex items-center gap-2 text-slate-800 m-0">
+              <MapPin className="w-5 h-5 text-orange-500" />
               Volume de Pedidos por Bairro
-            </CardTitle>
-            <CardDescription>
+            </h3>
+            <p className="text-sm text-slate-500 mt-1 m-0">
               Concentração logística baseada nas últimas entregas.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+            </p>
+          </div>
+          <div>
              <div className="h-[300px] w-full mt-4">
                <ResponsiveContainer width="100%" height="100%">
                  <BarChart data={mockNeighborhoodData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
@@ -133,17 +129,17 @@ export function Dashboard() {
                  </BarChart>
                </ResponsiveContainer>
              </div>
-          </CardContent>
+          </div>
         </Card>
         
-        <Card className="col-span-1 lg:col-span-3 shadow-sm border-slate-100 rounded-2xl">
-          <CardHeader>
-            <CardTitle className="text-slate-800">Níveis de Estoque Alerta</CardTitle>
-            <CardDescription>
+        <Card className="col-span-1 lg:col-span-3 shadow-sm border-slate-100 rounded-2xl" styles={{ body: { padding: '24px' } }}>
+          <div className="mb-6">
+            <h3 className="text-lg font-semibold text-slate-800 m-0">Níveis de Estoque Alerta</h3>
+            <p className="text-sm text-slate-500 mt-1 m-0">
               Produtos que precisam de atenção.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+            </p>
+          </div>
+          <div>
              <div className="space-y-4">
                <div className="flex items-center justify-between p-4 bg-white border border-slate-100 shadow-sm rounded-xl">
                  <div className="flex items-center gap-4">
@@ -151,8 +147,8 @@ export function Dashboard() {
                       <Box className="w-5 h-5 text-orange-500"/>
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-slate-800">Cilindro P45</p>
-                      <p className="text-xs text-slate-500 mt-0.5">Criticamente baixo</p>
+                      <p className="text-sm font-semibold text-slate-800 m-0">Cilindro P45</p>
+                      <p className="text-xs text-slate-500 mt-0.5 m-0">Criticamente baixo</p>
                     </div>
                  </div>
                  <div className="text-right">
@@ -167,8 +163,8 @@ export function Dashboard() {
                       <Box className="w-5 h-5 text-blue-600"/>
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-slate-800">Botijão P20</p>
-                      <p className="text-xs text-slate-500 mt-0.5">Atenção ao estoque</p>
+                      <p className="text-sm font-semibold text-slate-800 m-0">Botijão P20</p>
+                      <p className="text-xs text-slate-500 mt-0.5 m-0">Atenção ao estoque</p>
                     </div>
                  </div>
                  <div className="text-right">
@@ -177,7 +173,7 @@ export function Dashboard() {
                  </div>
                </div>
              </div>
-          </CardContent>
+          </div>
         </Card>
       </div>
     </div>

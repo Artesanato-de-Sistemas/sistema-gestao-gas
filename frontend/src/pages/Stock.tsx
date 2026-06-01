@@ -1,15 +1,11 @@
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Card, Input, Button, Select, Table, Tag, Modal, Space, Typography, Row, Col, message } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import { Product, StockMovement } from '@/types';
 import { formatCurrency, formatDate } from '@/utils/formatters';
-import { Box, Plus, History, ArrowDownToLine, ArrowUpFromLine, Settings2, Search } from 'lucide-react';
+import { Box, History, ArrowDownToLine, ArrowUpFromLine, Settings2, Search } from 'lucide-react';
+
+const { Text, Title } = Typography;
 
 const mockProducts: Product[] = [
   { id: '1', name: 'Botijão P13 (Cheio)', current_price: 115.00, active: true, stock_quantity: 245, updated_at: '2023-10-05T14:30:00Z' },
@@ -62,211 +58,248 @@ export function Stock() {
     ));
     
     setIsAdjustmentOpen(false);
-    alert('Movimentação registrada com sucesso!');
+    message.success('Movimentação registrada com sucesso!');
   };
 
   const filteredProducts = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+
+  const columns: ColumnsType<Product> = [
+    {
+      title: 'Produto',
+      key: 'name',
+      render: (_, record) => (
+        <div>
+          <p className="font-semibold text-slate-800 m-0">{record.name}</p>
+          <p className="text-xs text-slate-500 m-0 mt-1">Atualizado em {formatDate(record.updated_at)}</p>
+        </div>
+      )
+    },
+    {
+      title: 'Preço Atual',
+      key: 'price',
+      render: (_, record) => (
+        <span className="font-medium text-slate-800">{formatCurrency(record.current_price)}</span>
+      )
+    },
+    {
+      title: 'Saldo em Estoque',
+      key: 'stock',
+      render: (_, record) => (
+        <div className="flex items-baseline gap-1">
+          <span className={`text-lg font-bold ${record.stock_quantity < 10 ? 'text-orange-600' : 'text-slate-800'}`}>
+              {record.stock_quantity}
+          </span>
+          <span className="text-xs text-slate-500">und</span>
+        </div>
+      )
+    },
+    {
+      title: 'Status',
+      key: 'status',
+      render: (_, record) => (
+        record.active ? (
+          <Tag color="success">Ativo</Tag>
+        ) : (
+          <Tag>Inativo</Tag>
+        )
+      )
+    },
+    {
+      title: 'Ações',
+      key: 'actions',
+      align: 'right',
+      render: (_, record) => (
+        <Button 
+          type="default" 
+          size="middle" 
+          onClick={() => openAdjustment(record)} 
+          className="rounded-lg text-slate-600 hover:text-orange-500 hover:border-orange-500 flex items-center justify-center transition-colors shadow-none float-right"
+          icon={<Settings2 className="w-4 h-4 ml-0.5" />}
+        >
+          Ajustar
+        </Button>
+      )
+    }
+  ];
+
+  const historyColumns: ColumnsType<StockMovement> = [
+    {
+      title: 'Data',
+      key: 'date',
+      render: (_, record) => (
+        <span className="text-sm text-slate-600 whitespace-nowrap">
+          {formatDate(record.created_at)}
+        </span>
+      )
+    },
+    {
+      title: 'Tipo',
+      key: 'type',
+      render: (_, record) => {
+        if (record.movement_type === 'ENTRADA') return <Tag color="success" icon={<ArrowDownToLine className="w-3 h-3 inline -mt-0.5" />}>Entrada</Tag>;
+        if (record.movement_type === 'SAIDA') return <Tag color="warning" icon={<ArrowUpFromLine className="w-3 h-3 inline -mt-0.5" />}>Saída</Tag>;
+        return <Tag color="default">Ajuste</Tag>;
+      }
+    },
+    {
+      title: 'Qtd',
+      key: 'qty',
+      align: 'right',
+      render: (_, record) => (
+        <span className="font-medium text-slate-800 text-sm">
+          {record.quantity > 0 ? `+${record.quantity}` : record.quantity}
+        </span>
+      )
+    },
+    {
+      title: 'Obs',
+      key: 'notes',
+      render: (_, record) => {
+        const p = products.find(prod => prod.id === record.product_id);
+        return (
+          <div className="text-sm text-slate-500">
+            <div className="font-medium text-slate-700 text-xs mb-0.5">{p?.name}</div>
+            {record.notes}
+          </div>
+        )
+      }
+    }
+  ];
 
   return (
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-800 flex items-center gap-2">
-             <Box className="w-6 h-6 text-blue-600" />
+          <h2 className="text-2xl font-bold tracking-tight text-slate-800 flex items-center gap-2 m-0">
+             <Box className="w-6 h-6 text-orange-500" />
              Controle de Estoque
           </h2>
-          <p className="text-slate-500 mt-1">Gerencie saldos, produtos ativos e visualize o histórico de movimentações.</p>
+          <p className="text-slate-500 mt-1 mb-0">Gerencie saldos, produtos ativos e visualize o histórico de movimentações.</p>
         </div>
         
-        <Button onClick={() => setIsHistoryOpen(true)} variant="outline" className="text-slate-700 bg-white rounded-xl gap-2 shadow-sm border-slate-200">
-          <History className="w-5 h-5" />
+        <Button 
+          type="default"
+          size="middle"
+          onClick={() => setIsHistoryOpen(true)} 
+          className="rounded-lg h-10 px-4 shadow-sm text-base font-medium flex items-center bg-white"
+          icon={<History className="w-5 h-5 ml-1" />}
+        >
           Histórico Global
         </Button>
       </div>
 
-      <Card className="border-slate-100 shadow-sm rounded-2xl">
-        <CardContent className="p-6">
-          <div className="flex flex-col lg:flex-row gap-4">
-            <div className="flex-1 space-y-2">
-              <Label className="text-slate-600">Buscar Produto</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                <Input
-                  placeholder="Nome do produto"
-                  className="pl-9 rounded-xl border-slate-200"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </div>
-            </div>
+      <Card className="border-slate-100 shadow-sm rounded-2xl p-2" styles={{ body: { padding: '16px' } }}>
+        <div className="flex flex-col lg:flex-row gap-4">
+          <div className="flex-1 space-y-2">
+            <label className="text-slate-600 block">Buscar Produto</label>
+            <Input
+              prefix={<Search className="h-4 w-4 text-slate-400" />}
+              placeholder="Nome do produto"
+              className="rounded-lg h-10 border-slate-200"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
-        </CardContent>
+        </div>
       </Card>
 
-      <Card className="border-slate-100 shadow-sm rounded-2xl">
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader className="bg-slate-50/50">
-                <TableRow className="border-slate-100 hover:bg-transparent">
-                  <TableHead className="font-semibold text-slate-600 pl-6 h-12">Produto</TableHead>
-                  <TableHead className="font-semibold text-slate-600 h-12">Preço Atual</TableHead>
-                  <TableHead className="font-semibold text-slate-600 h-12">Saldo em Estoque</TableHead>
-                  <TableHead className="font-semibold text-slate-600 h-12">Status</TableHead>
-                  <TableHead className="text-right font-semibold text-slate-600 pr-6 h-12">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredProducts.map((product) => (
-                  <TableRow key={product.id} className="hover:bg-slate-50/50 border-slate-100 transition-colors">
-                    <TableCell className="pl-6 py-4">
-                      <div>
-                        <p className="font-semibold text-slate-800">{product.name}</p>
-                        <p className="text-xs text-slate-500 mt-0.5">Atualizado em {formatDate(product.updated_at)}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell className="py-4 font-medium text-slate-800">
-                      {formatCurrency(product.current_price)}
-                    </TableCell>
-                    <TableCell className="py-4">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-lg font-bold ${product.stock_quantity < 10 ? 'text-orange-600' : 'text-slate-800'}`}>
-                            {product.stock_quantity}
-                        </span>
-                        <span className="text-xs text-slate-500">und</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="py-4">
-                      {product.active ? (
-                        <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200 shadow-none font-medium">Ativo</Badge>
-                      ) : (
-                        <Badge className="bg-slate-100 text-slate-600 hover:bg-slate-100 border-slate-200 shadow-none font-medium">Inativo</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right pr-6 py-4">
-                      <div className="flex justify-end gap-2">
-                        <Button variant="outline" size="sm" onClick={() => openAdjustment(product)} className="text-slate-600 hover:text-blue-700 hover:bg-blue-50 border-slate-200 rounded-lg">
-                          <Settings2 className="w-4 h-4 mr-2" />
-                          Ajustar
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {filteredProducts.length === 0 && (
-                   <TableRow>
-                     <TableCell colSpan={5} className="text-center py-10 text-slate-500">
-                       Nenhum produto encontrado.
-                     </TableCell>
-                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
+      <Card className="border-slate-100 shadow-sm rounded-2xl" styles={{ body: { padding: 0 } }}>
+        <Table
+          columns={columns}
+          dataSource={filteredProducts}
+          rowKey="id"
+          pagination={false}
+          className="w-full"
+        />
       </Card>
 
       {/* Adjustment Dialog */}
-      <Dialog open={isAdjustmentOpen} onOpenChange={setIsAdjustmentOpen}>
-        <DialogContent className="sm:max-w-[450px] rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="text-xl text-slate-800">Ajuste Manual de Estoque</DialogTitle>
-            <CardDescription className="pt-2">Lançamento para o produto: <strong className="text-slate-700">{selectedProduct?.name}</strong></CardDescription>
-          </DialogHeader>
-          
-          <div className="grid gap-6 py-4">
-            <div className="space-y-2">
-              <Label className="text-slate-600">Tipo de Movimentação</Label>
-              <Select value={adjType} onValueChange={(val: any) => setAdjType(val)}>
-                <SelectTrigger className="rounded-xl border-slate-200">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="rounded-xl">
-                  <SelectItem value="ENTRADA">Entrada (+)</SelectItem>
-                  <SelectItem value="SAIDA">Saída (-)</SelectItem>
-                  <SelectItem value="AJUSTE">Ajuste (+ ou -)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-slate-600">Quantidade</Label>
-              <Input 
-                 type="number"
-                 placeholder="Ex: 5"
-                 className="rounded-xl border-slate-200"
-                 value={adjQuantity} 
-                 onChange={e => setAdjQuantity(e.target.value)} 
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label className="text-slate-600">Observações (Opcional)</Label>
-              <Input 
-                 placeholder="Motivo do ajuste..."
-                 className="rounded-xl border-slate-200"
-                 value={adjNotes} 
-                 onChange={e => setAdjNotes(e.target.value)} 
-              />
-            </div>
+      <Modal 
+        open={isAdjustmentOpen} 
+        onCancel={() => setIsAdjustmentOpen(false)}
+        title={
+          <div>
+            <div className="text-xl">Ajuste Manual de Estoque</div>
+            <div className="text-sm font-normal text-white opacity-80 mt-1">Lançamento para o produto: <strong>{selectedProduct?.name}</strong></div>
+          </div>
+        }
+        footer={[
+          <Button key="cancel" onClick={() => setIsAdjustmentOpen(false)} className="rounded-full h-10 px-6 font-medium text-slate-600 border-none bg-slate-100 hover:bg-slate-200">
+            Cancelar
+          </Button>,
+          <Button 
+            key="submit" 
+            type="primary" 
+            onClick={handleSaveAdjustment} 
+            disabled={!adjQuantity || isNaN(Number(adjQuantity))} 
+            className="rounded-full h-10 px-6 font-medium"
+          >
+            Confirmar Ajuste
+          </Button>
+        ]}
+        width={450}
+        centered
+      >
+        <div className="grid gap-6 py-4 mt-2 mb-2">
+          <div className="space-y-1.5">
+            <label className="text-slate-800 block font-medium">Tipo de Movimentação</label>
+            <Select 
+              value={adjType} 
+              onChange={setAdjType}
+              className="w-full h-10"
+              options={[
+                { value: 'ENTRADA', label: 'Entrada (+)' },
+                { value: 'SAIDA', label: 'Saída (-)' },
+                { value: 'AJUSTE', label: 'Ajuste (+ ou -)' }
+              ]}
+            />
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAdjustmentOpen(false)} className="rounded-xl border-slate-200">
-              Cancelar
-            </Button>
-            <Button onClick={handleSaveAdjustment} disabled={!adjQuantity || isNaN(Number(adjQuantity))} className="rounded-xl bg-orange-500 hover:bg-orange-600 text-white">
-              Confirmar Ajuste
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          <div className="space-y-1.5">
+            <label className="text-slate-800 block font-medium">Quantidade</label>
+            <Input 
+               type="number"
+               placeholder="Ex: 5"
+               className="h-10 rounded-lg border-slate-300"
+               value={adjQuantity} 
+               onChange={e => setAdjQuantity(e.target.value)} 
+            />
+          </div>
+          
+          <div className="space-y-1.5">
+            <label className="text-slate-800 block font-medium">Observações (Opcional)</label>
+            <Input 
+               placeholder="Motivo do ajuste..."
+               className="h-10 rounded-lg border-slate-300"
+               value={adjNotes} 
+               onChange={e => setAdjNotes(e.target.value)} 
+            />
+          </div>
+        </div>
+      </Modal>
 
       {/* History Dialog */}
-      <Dialog open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
-        <DialogContent className="sm:max-w-[700px] rounded-2xl max-h-[80vh] overflow-hidden flex flex-col">
-          <DialogHeader className="shrink-0 pb-4">
-            <DialogTitle className="text-xl text-slate-800">Histórico Recente de Movimentações</DialogTitle>
-          </DialogHeader>
-          
-          <div className="flex-1 overflow-y-auto">
-            <Table>
-              <TableHeader className="bg-slate-50 sticky top-0">
-                <TableRow className="border-slate-100">
-                  <TableHead className="font-semibold text-slate-600 h-10">Data</TableHead>
-                  <TableHead className="font-semibold text-slate-600 h-10">Tipo</TableHead>
-                  <TableHead className="font-semibold text-slate-600 h-10 text-right">Qtd</TableHead>
-                  <TableHead className="font-semibold text-slate-600 h-10">Obs</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {mockMovements.map((mov) => {
-                  const p = products.find(prod => prod.id === mov.product_id);
-                  return (
-                    <TableRow key={mov.id} className="border-slate-100">
-                      <TableCell className="text-sm text-slate-600 whitespace-nowrap">
-                        {formatDate(mov.created_at)}
-                      </TableCell>
-                      <TableCell>
-                        {mov.movement_type === 'ENTRADA' && <Badge className="bg-blue-50 text-blue-700 hover:bg-blue-50 shadow-none border-none"><ArrowDownToLine className="w-3 h-3 mr-1"/> Entrada</Badge>}
-                        {mov.movement_type === 'SAIDA' && <Badge className="bg-orange-50 text-orange-700 hover:bg-orange-50 shadow-none border-none"><ArrowUpFromLine className="w-3 h-3 mr-1"/> Saída</Badge>}
-                        {mov.movement_type === 'AJUSTE' && <Badge className="bg-slate-100 text-slate-700 hover:bg-slate-100 shadow-none border-none">Ajuste</Badge>}
-                      </TableCell>
-                      <TableCell className="text-right font-medium text-slate-800 text-sm">
-                        {mov.quantity > 0 ? `+${mov.quantity}` : mov.quantity}
-                      </TableCell>
-                      <TableCell className="text-sm text-slate-500">
-                        <div className="font-medium text-slate-700 text-xs mb-0.5">{p?.name}</div>
-                        {mov.notes}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <Modal 
+        open={isHistoryOpen} 
+        onCancel={() => setIsHistoryOpen(false)}
+        title={<div className="text-xl">Histórico Recente de Movimentações</div>}
+        footer={null}
+        width={700}
+        centered
+        styles={{ body: { padding: 0 } }}
+        className="overflow-hidden"
+      >
+        <div className="max-h-[60vh] overflow-y-auto w-full pt-4">
+          <Table
+            columns={historyColumns}
+            dataSource={mockMovements}
+            rowKey="id"
+            pagination={false}
+            className="w-full font-sans"
+            size="middle"
+          />
+        </div>
+      </Modal>
     </div>
   );
 }

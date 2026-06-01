@@ -1,7 +1,7 @@
-import { Flame, Home, Box, Truck, Users, FileText, Menu, LogOut, User as UserIcon, Bike } from 'lucide-react';
+import { Flame, Home, Box, Truck, Users, FileText, Menu, LogOut, User as UserIcon, Bike, UserCog } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { Button } from '../ui/button';
+import { Button } from 'antd';
 import { useAuthStore } from '@/store/useAuth';
 
 export function Sidebar({ isOpen, toggle }: { isOpen: boolean; toggle: () => void }) {
@@ -9,9 +9,10 @@ export function Sidebar({ isOpen, toggle }: { isOpen: boolean; toggle: () => voi
     { name: 'Entradas', path: '/inbounds', icon: Truck },
     { name: 'Dashboard', path: '/dashboard', icon: Home },
     { name: 'Estoque', path: '/estoque', icon: Box },
-    { name: 'Entregadores', path: '/entregadores', icon: Bike },
     { name: 'Vendas', path: '/vendas', icon: FileText },
     { name: 'Clientes', path: '/clientes', icon: Users },
+    { name: 'Entregadores', path: '/entregadores', icon: Bike },
+    { name: 'Colaboradores', path: '/colaboradores', icon: UserCog },
   ];
 
   const user = useAuthStore((state) => state.user);
@@ -30,9 +31,7 @@ export function Sidebar({ isOpen, toggle }: { isOpen: boolean; toggle: () => voi
             <img src="/logo.png" alt="" className="h-10 w-auto object-contain" referrerPolicy="no-referrer" />
           </div>
         )}
-        <Button variant="ghost" size="icon" onClick={toggle} className={cn("text-white hover:bg-white/20 hover:text-white shrink-0 z-10", isOpen ? "absolute right-2" : "")}>
-          <Menu className="w-5 h-5" />
-        </Button>
+        <Button type="text" onClick={toggle} className={cn("text-white hover:!bg-white/20 hover:!text-white shrink-0 z-10 flex items-center justify-center p-0 w-8 h-8", isOpen ? "absolute right-2" : "")} icon={<Menu className="w-5 h-5" />} />
       </div>
 
       <nav className="flex-1 py-4 overflow-y-auto space-y-1 px-3">
@@ -68,18 +67,14 @@ export function Sidebar({ isOpen, toggle }: { isOpen: boolean; toggle: () => voi
                  {user?.name || 'Vendedor'}
                </span>
             </div>
-            <Button variant="ghost" size="icon" onClick={logout} title="Sair" className="text-white hover:bg-black/10 hover:text-white shrink-0">
-              <LogOut className="w-5 h-5" />
-            </Button>
+            <Button type="text" onClick={logout} title="Sair" className="text-white hover:!bg-white/20 hover:!text-white shrink-0 flex items-center justify-center p-0 w-8 h-8" icon={<LogOut className="w-5 h-5" />} />
           </div>
         ) : (
           <div className="flex flex-col gap-4 items-center">
             <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-white shrink-0 cursor-pointer" title={user?.name || 'Vendedor'}>
               <UserIcon className="w-4 h-4" />
             </div>
-            <Button variant="ghost" size="icon" onClick={logout} title="Sair" className="text-white hover:bg-black/10 hover:text-white shrink-0">
-              <LogOut className="w-4 h-4" />
-            </Button>
+            <Button type="text" onClick={logout} title="Sair" className="text-white hover:!bg-white/20 hover:!text-white shrink-0 flex items-center justify-center p-0 w-8 h-8" icon={<LogOut className="w-4 h-4" />} />
           </div>
         )}
       </div>

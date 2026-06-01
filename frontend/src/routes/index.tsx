@@ -1,3 +1,4 @@
+import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Login } from '@/pages/Login';
@@ -7,6 +8,7 @@ import { DriversDashboard } from '@/pages/DriversDashboard';
 import { Customers } from '@/pages/Customers';
 import { Sales } from '@/pages/Sales';
 import { Stock } from '@/pages/Stock';
+import { Employees } from '@/pages/Employees';
 import { useAuthStore } from '@/store/useAuth';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -38,6 +40,7 @@ export function AppRoutes() {
         
         {/* Mocking other routes for now */}
         <Route path="estoque" element={<Stock />} />
+        <Route path="colaboradores" element={<Employees />} />
         <Route path="entregadores" element={<DriversDashboard />} />
         <Route path="vendas" element={<Sales />} />
         <Route path="clientes" element={<Customers />} />

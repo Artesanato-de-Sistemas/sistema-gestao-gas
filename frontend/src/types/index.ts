@@ -46,6 +46,17 @@ export interface DriverFinancialReport {
   netProfit: number;
 }
 
+export interface Employee {
+  id: string;
+  name: string;
+  document: string;
+  phone: string;
+  role: 'ENTREGADOR' | 'SECRETARIO';
+  active: boolean;
+  email?: string;
+  created_at: string;
+}
+
 export interface Client {
   id: string;
   person_id: string;

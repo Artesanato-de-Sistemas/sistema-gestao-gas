@@ -1,113 +1,46 @@
-import { useState } from "react";
-import { Button, Card, Input, Select, Table, Tag, Modal, Space, Typography } from "antd";
+import { useState, useEffect } from "react";
+import { Button, Card, Input, Select, Table, Tag, Modal, Space, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { Order, OrderItem, Client, Product, DeliveryDriver } from "@/types";
 import { formatCurrency, formatDate } from "@/utils/formatters";
 import { FileText, Search, Plus, Eye, Trash2 } from "lucide-react";
+import { api } from "@/services/api";
 
 const { Text, Title } = Typography;
 
-const mockClients: Client[] = [
-  {
-    id: "c1",
-    name: "João Carlos Silva",
-    person_id: "p1",
-    payment_deadline_days: 0,
-    active: true,
-    person_type: "FISICA",
-    document: "123.456.789-00",
-    phone: "(11) 98888-5678",
-    created_at: "",
-  },
-  {
-    id: "c2",
-    name: "Restaurante Sabor de Minas",
-    trade_name: "Sabor de Minas",
-    person_id: "p2",
-    payment_deadline_days: 15,
-    active: true,
-    person_type: "JURIDICA",
-    document: "12.345.678/0001-90",
-    phone: "(11) 99999-1234",
-    created_at: "",
-  },
-];
-
-const mockDrivers: DeliveryDriver[] = [
-  { id: "d1", name: "Marcos Antonio" },
-  { id: "d2", name: "Pedro Paulo" },
-];
-
-const mockProducts: Product[] = [
-  {
-    id: "prod1",
-    name: "Botijão P13 (Cheio)",
-    current_price: 115.0,
-    active: true,
-    stock_quantity: 245,
-    updated_at: "",
-  },
-  {
-    id: "prod2",
-    name: "Botijão P20 (Cheio)",
-    current_price: 180.0,
-    active: true,
-    stock_quantity: 12,
-    updated_at: "",
-  },
-];
-
-const mockOrders: Order[] = [
-  {
-    id: "ord1",
-    client_id: "c1",
-    client_name: "João Carlos Silva",
-    delivery_driver_id: "d1",
-    driver_name: "Marcos Antonio",
-    sale_type: "A VISTA",
-    status: "FINALIZADO",
-    total_amount: 115.0,
-    created_at: "2023-11-20T10:30:00Z",
-    items: [
-      {
-        id: "item1",
-        order_id: "ord1",
-        product_id: "prod1",
-        product_name: "Botijão P13 (Cheio)",
-        quantity: 1,
-        unit_price: 115.0,
-        subtotal: 115.0,
-      },
-    ],
-  },
-  {
-    id: "ord2",
-    client_id: "c2",
-    client_name: "Restaurante Sabor de Minas",
-    delivery_driver_id: "d2",
-    driver_name: "Pedro Paulo",
-    sale_type: "A PRAZO",
-    due_date: "2023-12-05",
-    status: "ABERTO",
-    total_amount: 345.0,
-    created_at: "2023-11-21T14:45:00Z",
-    items: [
-      {
-        id: "item2",
-        order_id: "ord2",
-        product_id: "prod1",
-        product_name: "Botijão P13 (Cheio)",
-        quantity: 3,
-        unit_price: 115.0,
-        subtotal: 345.0,
-      },
-    ],
-  },
-];
-
 export function Sales() {
-  const [orders, setOrders] = useState<Order[]>(mockOrders);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [drivers, setDrivers] = useState<DeliveryDriver[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  
+  const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [ordersRes, clientsRes, driversRes, productsRes] = await Promise.all([
+        api.get('/orders'),
+        api.get('/clients'),
+        api.get('/drivers'),
+        api.get('/products')
+      ]);
+      setOrders(ordersRes.data);
+      setClients(clientsRes.data);
+      setDrivers(driversRes.data);
+      setProducts(productsRes.data);
+    } catch (error) {
+      console.error(error);
+      message.error("Erro ao carregar dados de vendas");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
 
   // Create Modal
   const [isNewOrderOpen, setIsNewOrderOpen] = useState(false);
@@ -127,7 +60,7 @@ export function Sales() {
 
   const handleAddItem = () => {
     if (!selectedProd || !qty) return;
-    const prod = mockProducts.find((p) => p.id === selectedProd);
+    const prod = products.find((p) => p.id === selectedProd);
     if (!prod) return;
 
     const existing = orderItems.find((i) => i.product_id === selectedProd);
@@ -157,50 +90,29 @@ export function Sales() {
     setOrderItems(orderItems.filter((_, i) => i !== idx));
   };
 
-  const handleCreateOrder = () => {
+  const handleCreateOrder = async () => {
     if (!selectedClient || orderItems.length === 0) return;
 
-    const client = mockClients.find((c) => c.id === selectedClient);
-    const driver =
-      selectedDriver === "none"
-        ? undefined
-        : mockDrivers.find((d) => d.id === selectedDriver);
-
-    let total = 0;
-    const fullItems: OrderItem[] = orderItems.map((item, idx) => {
-      const p = mockProducts.find((pd) => pd.id === item.product_id);
-      const subtotal = item.quantity * item.unit_price;
-      total += subtotal;
-      return {
-        id: `new_item_${idx}`,
-        order_id: "temp",
-        product_id: item.product_id,
-        product_name: p?.name,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        subtotal,
-      };
-    });
-
-    const newOrder: Order = {
-      id: Math.random().toString(36).substr(2, 9),
+    const payload = {
       client_id: selectedClient,
-      client_name: client?.trade_name || client?.name,
-      delivery_driver_id: driver?.id,
-      driver_name: driver?.name,
+      delivery_driver_id: selectedDriver === "none" ? undefined : selectedDriver,
       sale_type: saleType,
-      status: saleType === "A PRAZO" ? "ABERTO" : "FINALIZADO",
-      total_amount: total,
-      created_at: new Date().toISOString(),
-      items: fullItems,
+      items: orderItems
     };
 
-    setOrders([newOrder, ...orders]);
-    setIsNewOrderOpen(false);
-    setOrderItems([]);
-    setSelectedClient("");
-    setSelectedDriver("none");
-    setSaleType("A VISTA");
+    try {
+      await api.post('/orders', payload);
+      message.success('Venda concluída com sucesso!');
+      setIsNewOrderOpen(false);
+      setOrderItems([]);
+      setSelectedClient("");
+      setSelectedDriver("none");
+      setSaleType("A VISTA");
+      fetchData();
+    } catch (error) {
+      console.error(error);
+      message.error('Erro ao realizar venda');
+    }
   };
 
   const filteredOrders = orders.filter((o) => {
@@ -323,6 +235,7 @@ export function Sales() {
           columns={columns}
           rowKey="id"
           pagination={false}
+          loading={loading}
           className="w-full"
         />
       </Card>
@@ -361,7 +274,7 @@ export function Sales() {
                 onChange={setSelectedClient}
                 placeholder="Selecione o cliente"
                 className="w-full h-10"
-                options={mockClients.map((c) => ({
+                options={clients.map((c) => ({
                   value: c.id,
                   label: c.trade_name || c.name,
                 }))}
@@ -377,9 +290,8 @@ export function Sales() {
                 onChange={setSelectedDriver}
                 className="w-full h-10"
                 options={[
-                  { value: "none", label: "Selecione entregador" },
-                  { value: "balcao", label: "Balcão (Sem entregador)" },
-                  ...mockDrivers.map((d) => ({
+                  { value: "none", label: "Balcão (Sem entregador)" },
+                  ...drivers.map((d) => ({
                     value: d.id,
                     label: d.name,
                   })),
@@ -417,7 +329,7 @@ export function Sales() {
                   onChange={setSelectedProd}
                   placeholder="Pesquisar produto"
                   className="w-full h-10"
-                  options={mockProducts.map((p) => ({
+                  options={products.map((p) => ({
                     value: p.id,
                     label: `${p.name} - ${formatCurrency(p.current_price)}`,
                   }))}
@@ -449,7 +361,7 @@ export function Sales() {
             {orderItems.length > 0 && (
               <div className="mt-6 space-y-3">
                 {orderItems.map((item, idx) => {
-                  const p = mockProducts.find((x) => x.id === item.product_id);
+                  const p = products.find((x) => x.id === item.product_id);
                   return (
                     <div
                       key={idx}
@@ -519,7 +431,7 @@ export function Sales() {
               <div className="text-right">
                 <p className="text-sm text-slate-500 m-0">Data</p>
                 <p className="font-medium text-slate-800 m-0">
-                  {formatDate(viewingOrder.created_at)}
+                  {formatDate(viewingOrder.created_at || new Date().toISOString())}
                 </p>
               </div>
             </div>

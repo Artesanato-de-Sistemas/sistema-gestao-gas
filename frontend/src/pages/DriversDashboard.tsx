@@ -1,26 +1,39 @@
-import { useState } from 'react';
-import { Card, Select, Table, Typography, Row, Col, Space, Avatar } from 'antd';
+import { useState, useEffect } from 'react';
+import { Card, Select, Table, Typography, Avatar, message } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { DriverFinancialReport } from '@/types';
 import { formatCurrency } from '@/utils/formatters';
 import { UserCircle, TrendingDown, TrendingUp, DollarSign, BarChart3 } from 'lucide-react';
+import { api } from '@/services/api';
 
 const { Title, Text } = Typography;
 
-const mockDrivers: DriverFinancialReport[] = [
-  { driverId: '1', driverName: 'Roberto Silva', cylindersSold: 45, grossAmount: 4950, withdrawals: 150, netProfit: 4800 },
-  { driverId: '2', driverName: 'João Souza', cylindersSold: 32, grossAmount: 3520, withdrawals: 300, netProfit: 3220 },
-  { driverId: '3', driverName: 'Fernando Costa', cylindersSold: 58, grossAmount: 6380, withdrawals: 0, netProfit: 6380 },
-  { driverId: '4', driverName: 'Carlos Mendes', cylindersSold: 12, grossAmount: 1320, withdrawals: 500, netProfit: 820 },
-];
-
 export function DriversDashboard() {
   const [period, setPeriod] = useState('Hoje');
+  const [data, setData] = useState<DriverFinancialReport[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const totalCylinders = mockDrivers.reduce((acc, d) => acc + d.cylindersSold, 0);
-  const totalGross = mockDrivers.reduce((acc, d) => acc + d.grossAmount, 0);
-  const totalWithdrawals = mockDrivers.reduce((acc, d) => acc + d.withdrawals, 0);
-  const totalNet = mockDrivers.reduce((acc, d) => acc + d.netProfit, 0);
+  const fetchReports = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get(`/dashboard/drivers?period=${period}`);
+      setData(res.data);
+    } catch (error) {
+      console.error(error);
+      message.error("Erro ao buscar relatório dos entregadores");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchReports();
+  }, [period]);
+
+  const totalCylinders = data.reduce((acc, d) => acc + d.cylindersSold, 0);
+  const totalGross = data.reduce((acc, d) => acc + d.grossAmount, 0);
+  const totalWithdrawals = data.reduce((acc, d) => acc + d.withdrawals, 0);
+  const totalNet = data.reduce((acc, d) => acc + d.netProfit, 0);
 
   const columns: ColumnsType<DriverFinancialReport> = [
     {
@@ -130,7 +143,7 @@ export function DriversDashboard() {
         </Card>
       </div>
 
-      <Card className="shadow-sm border-slate-100 rounded-2xl" styles={{ body: { padding: '24px' } }}>
+      <Card className="shadow-sm border-slate-100 rounded-2xl" styles={{ body: { padding: '0' } }}>
         <div className="p-6 border-b border-slate-50">
           <h3 className="text-lg font-semibold text-slate-800 m-0">Detalhamento por Entregador</h3>
           <p className="text-sm text-slate-500 mt-1 m-0">
@@ -139,9 +152,10 @@ export function DriversDashboard() {
         </div>
         <Table
           columns={columns}
-          dataSource={mockDrivers}
+          dataSource={data}
           rowKey="driverId"
           pagination={false}
+          loading={loading}
           className="w-full"
         />
       </Card>

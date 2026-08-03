@@ -1,43 +1,15 @@
-import { useState } from "react";
-import { Button, Card, Input, Select, Table, Tag, Modal, Space, Typography, Popconfirm } from "antd";
+import { useState, useEffect } from "react";
+import { Button, Card, Input, Select, Table, Tag, Modal, Space, Typography, Popconfirm, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { Employee } from "@/types";
+import { DeliveryDriver } from "@/types";
 import { Users, Search, Plus, Edit2, Trash2 } from "lucide-react";
 import { formatDate } from "@/utils/formatters";
-
-const mockEmployees: Employee[] = [
-  {
-    id: "1",
-    name: "Marcos Antonio",
-    document: "111.222.333-44",
-    phone: "(11) 97777-1111",
-    role: "ENTREGADOR",
-    active: true,
-    created_at: "2023-11-20T10:00:00Z",
-  },
-  {
-    id: "2",
-    name: "Pedro Paulo",
-    document: "555.666.777-88",
-    phone: "(11) 98888-2222",
-    role: "ENTREGADOR",
-    active: true,
-    created_at: "2023-11-21T11:00:00Z",
-  },
-  {
-    id: "3",
-    name: "Ana Souza",
-    document: "999.888.777-66",
-    phone: "(11) 99999-3333",
-    role: "SECRETARIO",
-    active: true,
-    email: "ana@imperiodogas.com.br",
-    created_at: "2023-11-15T09:30:00Z",
-  },
-];
+import { maskCPF, maskPhone } from "@/utils/masks";
+import { api } from "@/services/api";
 
 export function Employees() {
-  const [employees, setEmployees] = useState<Employee[]>(mockEmployees);
+  const [drivers, setDrivers] = useState<DeliveryDriver[]>([]);
+  const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
 
   // Registration Form State
@@ -47,75 +19,95 @@ export function Employees() {
   const [name, setName] = useState("");
   const [document, setDocument] = useState("");
   const [phone, setPhone] = useState("");
-  const [role, setRole] = useState<"ENTREGADOR" | "SECRETARIO">("ENTREGADOR");
-  const [email, setEmail] = useState("");
+  const [commissionPercentage, setCommissionPercentage] = useState<number>(10);
   const [active, setActive] = useState(true);
 
-  const handleOpenForm = (employee?: Employee) => {
-    if (employee) {
-      setEditingId(employee.id);
-      setName(employee.name);
-      setDocument(employee.document);
-      setPhone(employee.phone);
-      setRole(employee.role);
-      setEmail(employee.email || "");
-      setActive(employee.active);
+  const fetchDrivers = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get('/drivers');
+      setDrivers(res.data);
+    } catch (error) {
+      console.error(error);
+      message.error('Erro ao buscar entregadores');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDrivers();
+  }, []);
+
+  const handleOpenForm = (driver?: DeliveryDriver) => {
+    if (driver) {
+      setEditingId(driver.id);
+      setName(driver.name);
+      setDocument(driver.document || "");
+      setPhone(driver.phone || "");
+      setCommissionPercentage(driver.commission_percentage);
+      setActive(driver.active);
     } else {
       setEditingId(null);
       setName("");
       setDocument("");
       setPhone("");
-      setRole("ENTREGADOR");
-      setEmail("");
+      setCommissionPercentage(10);
       setActive(true);
     }
     setIsOpen(true);
   };
 
-  const handleSave = () => {
-    if (!name || !document) return;
-
-    if (editingId) {
-      setEmployees(
-        employees.map((e) =>
-          e.id === editingId
-            ? { ...e, name, document, phone, role, email, active }
-            : e,
-        ),
-      );
-    } else {
-      const newEmployee: Employee = {
-        id: Math.random().toString(36).substr(2, 9),
-        name,
-        document,
-        phone,
-        role,
-        email,
-        active,
-        created_at: new Date().toISOString(),
-      };
-      setEmployees([newEmployee, ...employees]);
+  const handleSave = async () => {
+    if (!name || !document) {
+       message.warning('Nome e CPF são obrigatórios');
+       return;
     }
 
-    setIsOpen(false);
+    const payload = {
+      name,
+      document,
+      phone,
+      commission_percentage: commissionPercentage,
+      active
+    };
+
+    try {
+      if (editingId) {
+        await api.put(`/drivers/${editingId}`, payload);
+        message.success('Entregador atualizado');
+      } else {
+        await api.post('/drivers', payload);
+        message.success('Entregador cadastrado');
+      }
+      setIsOpen(false);
+      fetchDrivers();
+    } catch (error) {
+      console.error(error);
+      message.error('Erro ao salvar entregador');
+    }
   };
 
-  const handleDelete = (id: string) => {
-    setEmployees(
-      employees.map((e) => (e.id === id ? { ...e, active: false } : e)),
-    );
+  const handleDelete = async (id: string) => {
+    try {
+      await api.delete(`/drivers/${id}`);
+      message.success('Entregador removido');
+      fetchDrivers();
+    } catch (error) {
+      console.error(error);
+      message.error('Erro ao remover entregador');
+    }
   };
 
-  const filteredEmployees = employees.filter(
-    (e) =>
-      e.name.toLowerCase().includes(search.toLowerCase()) ||
-      e.document.includes(search) ||
-      e.role.toLowerCase().includes(search.toLowerCase()),
+  const filteredDrivers = drivers.filter(
+    (d) =>
+      d.name.toLowerCase().includes(search.toLowerCase()) ||
+      (d.document && d.document.includes(search))
   );
 
-  const columns: ColumnsType<Employee> = [
+  const columns: ColumnsType<DeliveryDriver> = [
     {
-      title: 'Colaborador',
+      title: 'Entregador',
       key: 'name',
       render: (_, record) => (
         <div>
@@ -125,29 +117,19 @@ export function Employees() {
       )
     },
     {
-      title: 'Cargo',
-      key: 'role',
+      title: 'Comissão',
+      key: 'commission',
       render: (_, record) => (
-        <div>
-          <div className="font-medium text-slate-700">
-            {record.role === "ENTREGADOR" ? "Entregador" : "Secretário"}
-          </div>
-          <div className="text-xs text-slate-500 mt-1">
-            Desde {formatDate(record.created_at).split(" ")[0]}
-          </div>
+        <div className="font-medium text-slate-700">
+          {record.commission_percentage}%
         </div>
       )
     },
     {
-      title: 'Contatos',
-      key: 'contacts',
+      title: 'Telefone',
+      key: 'phone',
       render: (_, record) => (
-        <div>
-          <div className="text-sm text-slate-700">{record.phone || "-"}</div>
-          {record.email && (
-            <div className="text-xs text-slate-500 mt-1">{record.email}</div>
-          )}
-        </div>
+        <div className="text-sm text-slate-700">{record.phone || "-"}</div>
       )
     },
     {
@@ -170,7 +152,7 @@ export function Employees() {
         <Space>
           <Button type="text" icon={<Edit2 className="w-4 h-4 text-slate-400" />} onClick={() => handleOpenForm(record)} />
           {record.active && (
-            <Popconfirm title="Tem certeza que deseja inativar este colaborador?" onConfirm={() => handleDelete(record.id)} okText="Sim" cancelText="Não">
+            <Popconfirm title="Tem certeza que deseja remover este entregador?" onConfirm={() => handleDelete(record.id)} okText="Sim" cancelText="Não">
               <Button type="text" icon={<Trash2 className="w-4 h-4 text-red-500" />} />
             </Popconfirm>
           )}
@@ -185,10 +167,10 @@ export function Employees() {
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-slate-800 flex items-center gap-2 m-0">
             <Users className="w-6 h-6 text-orange-500" />
-            Gestão de Pessoas
+            Entregadores
           </h2>
           <p className="text-slate-500 mt-1 mb-0">
-            Cadastre e gerencie os colaboradores (Entregadores e Secretários).
+            Cadastre e gerencie os entregadores e suas comissões.
           </p>
         </div>
 
@@ -198,16 +180,16 @@ export function Employees() {
           onClick={() => handleOpenForm()}
           className="rounded-lg h-10 px-4 shadow-sm text-base font-medium flex items-center"
         >
-          Novo Colaborador
+          Novo Entregador
         </Button>
       </div>
 
       <Card className="rounded-2xl shadow-sm border-slate-100 p-2" styles={{ body: { padding: '16px' } }}>
         <div className="flex-1 space-y-2 max-w-md">
-          <label className="text-slate-600 block">Buscar Colaborador</label>
+          <label className="text-slate-600 block">Buscar Entregador</label>
           <Input
             prefix={<Search className="h-4 w-4 text-slate-400" />}
-            placeholder="Nome, CPF ou Cargo"
+            placeholder="Nome ou CPF"
             className="rounded-lg h-10 border-slate-200"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -218,15 +200,16 @@ export function Employees() {
       <Card className="border-slate-100 shadow-sm rounded-2xl" styles={{ body: { padding: 0 } }}>
         <Table
           columns={columns}
-          dataSource={filteredEmployees}
+          dataSource={filteredDrivers}
           rowKey="id"
           pagination={false}
+          loading={loading}
           className="w-full"
         />
       </Card>
 
       <Modal
-        title={editingId ? "Editar Colaborador" : "Novo Colaborador"}
+        title={editingId ? "Editar Entregador" : "Novo Entregador"}
         open={isOpen}
         onCancel={() => setIsOpen(false)}
         footer={[
@@ -240,45 +223,18 @@ export function Employees() {
             onClick={handleSave} 
             className="rounded-full h-10 px-6 font-medium"
           >
-            {editingId ? "Salvar Edição" : "Cadastrar Colaborador"}
+            {editingId ? "Salvar Edição" : "Cadastrar Entregador"}
           </Button>
         ]}
         width={500}
         centered
       >
         <div className="grid gap-5 py-4 mt-2 mb-2">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5 flex flex-col col-span-2 sm:col-span-1">
-              <label className="text-slate-800 font-medium text-base">Cargo *</label>
-              <Select 
-                value={role} 
-                onChange={setRole}
-                className="w-full h-10"
-                options={[
-                  { value: 'ENTREGADOR', label: 'Entregador' },
-                  { value: 'SECRETARIO', label: 'Secretário' }
-                ]}
-              />
-            </div>
-
-            <div className="space-y-1.5 flex flex-col col-span-2 sm:col-span-1">
-              <label className="text-slate-800 font-medium text-base">Status</label>
-              <Select
-                value={active}
-                onChange={setActive}
-                className="w-full h-10"
-                options={[
-                  { value: true, label: 'Ativo' },
-                  { value: false, label: 'Inativo' }
-                ]}
-              />
-            </div>
-          </div>
-
+          
           <div className="space-y-1.5 flex flex-col">
             <label className="text-slate-800 font-medium text-base">Nome Completo *</label>
             <Input
-              placeholder="Nome do colaborador"
+              placeholder="Nome do entregador"
               className="h-10 border-slate-300"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -292,7 +248,7 @@ export function Employees() {
                 placeholder="000.000.000-00"
                 className="h-10 border-slate-300"
                 value={document}
-                onChange={(e) => setDocument(e.target.value)}
+                onChange={(e) => setDocument(maskCPF(e.target.value))}
               />
             </div>
             <div className="space-y-1.5 flex flex-col">
@@ -301,27 +257,36 @@ export function Employees() {
                 placeholder="(11) 90000-0000"
                 className="h-10 border-slate-300"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => setPhone(maskPhone(e.target.value))}
               />
             </div>
           </div>
 
-          {role === "SECRETARIO" && (
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5 flex flex-col">
-              <label className="text-slate-800 font-medium text-base">E-mail para Login</label>
+              <label className="text-slate-800 font-medium text-base">Comissão (%)</label>
               <Input
-                placeholder="email@imperiodogas.com.br"
-                type="email"
+                type="number"
+                placeholder="Ex: 10"
                 className="h-10 border-slate-300"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={commissionPercentage}
+                onChange={(e) => setCommissionPercentage(Number(e.target.value))}
               />
-              <p className="text-xs text-slate-500 m-0">
-                Secretários podem ter acesso ao sistema de gestão, usando este
-                e-mail para acesso.
-              </p>
             </div>
-          )}
+            <div className="space-y-1.5 flex flex-col">
+              <label className="text-slate-800 font-medium text-base">Status</label>
+              <Select
+                value={active}
+                onChange={setActive}
+                className="w-full h-10"
+                options={[
+                  { value: true, label: 'Ativo' },
+                  { value: false, label: 'Inativo' }
+                ]}
+              />
+            </div>
+          </div>
+
         </div>
       </Modal>
     </div>

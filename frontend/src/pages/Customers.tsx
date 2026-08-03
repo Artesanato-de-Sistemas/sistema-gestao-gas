@@ -1,35 +1,17 @@
-import { useState } from 'react';
-import { Button, Card, Input, Select, Table, Tag, Modal, Space, Typography, Popconfirm, Row, Col } from 'antd';
+import { useState, useEffect } from 'react';
+import { Button, Card, Input, Select, Table, Tag, Modal, Space, Typography, Popconfirm, message } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { Client } from '@/types';
 import { formatCurrency } from '@/utils/formatters';
+import { maskCPF, maskCNPJ, maskPhone } from '@/utils/masks';
 import { Users, Search, Plus, AlertCircle, Edit, Trash2 } from 'lucide-react';
+import { api } from '@/services/api';
 
 const { Text, Title } = Typography;
 
-const mockClients: Client[] = [
-  {
-    id: '1', person_id: 'p1', payment_deadline_days: 15, active: true, person_type: 'JURIDICA',
-    name: 'Restaurante Sabor de Minas', document: '12.345.678/0001-90', phone: '(11) 99999-1234',
-    trade_name: 'Sabor de Minas', created_at: '2023-01-10T10:00:00Z',
-    isInadimplente: false, revenue: 15000, purchasesCount: 45
-  },
-  {
-    id: '2', person_id: 'p2', payment_deadline_days: 0, active: true, person_type: 'FISICA',
-    name: 'João Carlos Silva', document: '123.456.789-00', phone: '(11) 98888-5678',
-    created_at: '2023-03-22T14:30:00Z',
-    isInadimplente: true, revenue: 350, purchasesCount: 3
-  },
-  {
-    id: '3', person_id: 'p3', payment_deadline_days: 30, active: true, person_type: 'JURIDICA',
-    name: 'Padaria Pão Quente', document: '98.765.432/0001-10', phone: '(11) 97777-9012',
-    trade_name: 'Pão Quente', created_at: '2023-05-15T08:15:00Z',
-    isInadimplente: false, revenue: 32000, purchasesCount: 120
-  },
-];
-
 export function Customers() {
-  const [clients, setClients] = useState<Client[]>(mockClients);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   
@@ -41,8 +23,25 @@ export function Customers() {
 
   // Form State
   const [formData, setFormData] = useState<Partial<Client>>({
-    person_type: 'FISICA', active: true, payment_deadline_days: 0
+    person_type: 'FISICA', active: true, payment_deadline_days: 0, document: '', phone: '', email: ''
   });
+
+  const fetchClients = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get('/clients');
+      setClients(res.data);
+    } catch (error) {
+      console.error(error);
+      message.error('Erro ao buscar clientes');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchClients();
+  }, []);
 
   const handleOpenEdit = (client: Client) => {
     setEditingClient(client);
@@ -52,30 +51,45 @@ export function Customers() {
 
   const handleOpenNew = () => {
     setEditingClient(null);
-    setFormData({ person_type: 'FISICA', active: true, payment_deadline_days: 0, name: '', document: '', phone: '', trade_name: '' });
+    setFormData({ person_type: 'FISICA', active: true, payment_deadline_days: 0, name: '', document: '', phone: '', trade_name: '', email: '' });
     setIsDialogOpen(true);
   };
 
-  const handleSave = () => {
-    if (editingClient) {
-      setClients(clients.map(c => c.id === editingClient.id ? { ...c, ...formData } as Client : c));
-    } else {
-      const newClient = {
-        ...formData,
-        id: Math.random().toString(36).substr(2, 9),
-        person_id: Math.random().toString(36).substr(2, 9),
-        created_at: new Date().toISOString(),
-        isInadimplente: false,
-        revenue: 0,
-        purchasesCount: 0
-      } as Client;
-      setClients([...clients, newClient]);
+  const handleSave = async () => {
+    if (!formData.name || !formData.document) {
+      message.warning('Nome e Documento são obrigatórios');
+      return;
     }
-    setIsDialogOpen(false);
+
+    try {
+      if (editingClient) {
+        await api.put(`/clients/${editingClient.id}`, formData);
+        message.success('Cliente atualizado com sucesso');
+      } else {
+        await api.post('/clients', formData);
+        message.success('Cliente cadastrado com sucesso');
+      }
+      setIsDialogOpen(false);
+      fetchClients();
+    } catch (error) {
+      console.error(error);
+      message.error('Erro ao salvar cliente');
+    }
   };
 
-  const handleDelete = (id: string) => {
-    setClients(clients.filter(c => c.id !== id));
+  const handleDelete = async (id: string) => {
+    try {
+      await api.delete(`/clients/${id}`);
+      message.success('Cliente removido');
+      fetchClients();
+    } catch (error) {
+      console.error(error);
+      message.error('Erro ao remover cliente');
+    }
+  };
+
+  const handleDocumentChange = (val: string, type: 'FISICA' | 'JURIDICA') => {
+    setFormData({ ...formData, document: type === 'FISICA' ? maskCPF(val) : maskCNPJ(val) });
   };
 
   const filteredClients = clients.filter(c => {
@@ -95,6 +109,7 @@ export function Customers() {
         <div>
           <p className="font-semibold text-slate-800 m-0">{record.trade_name || record.name}</p>
           <p className="text-sm text-slate-500 m-0">{record.document} • {record.phone}</p>
+          {record.email && <p className="text-xs text-slate-400 m-0">{record.email}</p>}
         </div>
       )
     },
@@ -116,7 +131,7 @@ export function Customers() {
       render: (_, record) => (
         <div>
           <p className="font-medium text-slate-800 m-0">{formatCurrency(record.revenue || 0)}</p>
-          <p className="text-xs text-slate-500 m-0">{record.purchasesCount} pedidos</p>
+          <p className="text-xs text-slate-500 m-0">{record.purchasesCount || 0} pedidos</p>
         </div>
       )
     },
@@ -231,6 +246,7 @@ export function Customers() {
           dataSource={filteredClients}
           rowKey="id"
           pagination={false}
+          loading={loading}
           className="w-full"
         />
       </Card>
@@ -256,7 +272,9 @@ export function Customers() {
               <label className="text-slate-600 block font-medium">Tipo de Pessoa</label>
               <Select 
                  value={formData.person_type} 
-                 onChange={(val: 'FISICA'|'JURIDICA') => setFormData({...formData, person_type: val})}
+                 onChange={(val: 'FISICA'|'JURIDICA') => {
+                    setFormData({...formData, person_type: val, document: ''})
+                 }}
                  className="w-full h-10"
                  options={[
                    { value: 'FISICA', label: 'Física' },
@@ -269,7 +287,8 @@ export function Customers() {
               <Input 
                 className="h-10 border-slate-300"
                 value={formData.document || ''} 
-                onChange={e => setFormData({...formData, document: e.target.value})} 
+                onChange={e => handleDocumentChange(e.target.value, formData.person_type || 'FISICA')} 
+                placeholder={formData.person_type === 'FISICA' ? '000.000.000-00' : '00.000.000/0000-00'}
               />
             </div>
           </div>
@@ -300,7 +319,8 @@ export function Customers() {
               <Input 
                  className="h-10 border-slate-300"
                  value={formData.phone || ''} 
-                 onChange={e => setFormData({...formData, phone: e.target.value})} 
+                 onChange={e => setFormData({...formData, phone: maskPhone(e.target.value)})} 
+                 placeholder="(00) 00000-0000"
               />
             </div>
             <div className="space-y-2">
@@ -312,6 +332,17 @@ export function Customers() {
                  onChange={e => setFormData({...formData, payment_deadline_days: Number(e.target.value)})} 
               />
             </div>
+          </div>
+          
+          <div className="space-y-2">
+            <label className="text-slate-600 block font-medium">E-mail</label>
+            <Input 
+               type="email"
+               className="h-10 border-slate-300"
+               value={formData.email || ''} 
+               onChange={e => setFormData({...formData, email: e.target.value.toLowerCase()})} 
+               placeholder="contato@empresa.com"
+            />
           </div>
 
           <div className="space-y-2">

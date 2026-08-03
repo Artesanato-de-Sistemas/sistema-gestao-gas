@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Flame } from 'lucide-react';
 import { Button, Input, Card, Typography } from 'antd';
 import { useAuthStore } from '@/store/useAuth';
+import { api } from '@/services/api';
 
 const { Title, Text } = Typography;
 
@@ -13,21 +14,26 @@ export function Login() {
   const login = useAuthStore((state) => state.login);
   const navigate = useNavigate();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) return;
     
     setLoading(true);
-    
-    // Mock login
-    setTimeout(() => {
+    try {
+      // Need to import { api } from '@/services/api';
+      const res = await api.post('/auth/login', { email, password });
+      
       login(
-        { id: '1', name: 'Admin', email: email },
-        'mock_jwt_token_123'
+        res.data.user || { id: '1', name: 'Admin', email: email },
+        res.data.access_token
       );
       navigate('/');
+    } catch (error) {
+      console.error(error);
+      alert('Erro ao fazer login. Verifique as credenciais.');
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
   return (

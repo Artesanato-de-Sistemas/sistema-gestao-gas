@@ -24,11 +24,9 @@ export interface StockMovement {
 
 export interface InboundItem {
   id?: string;
-  type: 'P13' | 'P20' | 'P45';
-  condition: 'NOVO' | 'USADO';
-  status: 'OK' | 'DEFEITUOSO';
+  category: 'P13' | 'P20' | 'P45' | 'CASCO';
   quantity: number;
-  unitPrice: number;
+  unit_cost: number;
 }
 
 export interface InboundPayload {
@@ -59,13 +57,13 @@ export interface Employee {
 
 export interface Client {
   id: string;
-  person_id: string;
   payment_deadline_days: number;
   active: boolean;
   person_type: 'FISICA' | 'JURIDICA';
   name: string;
   document: string;
   phone: string;
+  email?: string;
   trade_name?: string;
   created_at: string;
   // Métricas agregadas
@@ -77,6 +75,11 @@ export interface Client {
 export interface DeliveryDriver {
   id: string;
   name: string;
+  document?: string;
+  phone?: string;
+  commission_percentage: number;
+  active: boolean;
+  created_at?: string;
 }
 
 export interface OrderItem {

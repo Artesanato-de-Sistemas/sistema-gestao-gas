@@ -1,9 +1,7 @@
 from typing import List, Optional
 from fastapi import HTTPException, status
-
 from app.core.database import get_supabase
 from app.schemas import Order, OrderCreate, OrderItem
-
 
 class OrderService:
     """Manages sales orders with items and stock deductions."""
@@ -17,7 +15,7 @@ class OrderService:
         query = (
             supabase.table("orders")
             .select(
-                "*, clients(persons(name, trade_name)), employees(name), order_items(*, products(name))"
+                "*, clients(name, trade_name), delivery_drivers(name), order_items(*, products(name))"
             )
             .order("created_at", desc=True)
             .limit(limit)
@@ -32,7 +30,7 @@ class OrderService:
         response = (
             supabase.table("orders")
             .select(
-                "*, clients(persons(name, trade_name)), employees(name), order_items(*, products(name))"
+                "*, clients(name, trade_name), delivery_drivers(name), order_items(*, products(name))"
             )
             .eq("id", order_id)
             .single()
@@ -72,28 +70,30 @@ class OrderService:
             items_payload.append({
                 "order_id": order_id,
                 "product_id": item.product_id,
+                "inbound_item_id": item.inbound_item_id,
                 "quantity": item.quantity,
                 "unit_price": item.unit_price,
                 "subtotal": item.quantity * item.unit_price,
             })
 
-            # Deduct from stock
-            prod_resp = supabase.table("products").select("stock_quantity").eq(
-                "id", item.product_id
-            ).single().execute()
-            if prod_resp.data:
-                new_qty = max(0, prod_resp.data["stock_quantity"] - item.quantity)
-                supabase.table("products").update({"stock_quantity": new_qty}).eq(
+            if item.product_id:
+                # Deduct from stock
+                prod_resp = supabase.table("products").select("stock_quantity").eq(
                     "id", item.product_id
-                ).execute()
+                ).single().execute()
+                if prod_resp.data:
+                    new_qty = max(0, prod_resp.data["stock_quantity"] - item.quantity)
+                    supabase.table("products").update({"stock_quantity": new_qty}).eq(
+                        "id", item.product_id
+                    ).execute()
 
-                # Log movement
-                supabase.table("stock_movements").insert({
-                    "product_id": item.product_id,
-                    "movement_type": "SAIDA",
-                    "quantity": -item.quantity,
-                    "notes": f"Venda pedido #{order_id[:6].upper()}",
-                }).execute()
+                    # Log movement
+                    supabase.table("stock_movements").insert({
+                        "product_id": item.product_id,
+                        "movement_type": "SAIDA",
+                        "quantity": -item.quantity,
+                        "notes": f"Venda pedido #{order_id[:6].upper()}",
+                    }).execute()
 
         if items_payload:
             supabase.table("order_items").insert(items_payload).execute()
@@ -106,10 +106,8 @@ class OrderService:
         return self.get_order(order_id)
 
     def _hydrate_order(self, raw: dict) -> Order:
-        """Flattens joined data into Order schema."""
         client_data = raw.get("clients") or {}
-        person_data = client_data.get("persons") or {}
-        driver_data = raw.get("employees") or {}
+        driver_data = raw.get("delivery_drivers") or {}
         raw_items = raw.get("order_items") or []
 
         items = []
@@ -118,14 +116,15 @@ class OrderService:
             items.append(OrderItem(
                 id=i["id"],
                 order_id=i["order_id"],
-                product_id=i["product_id"],
+                product_id=i.get("product_id"),
+                inbound_item_id=i.get("inbound_item_id"),
                 product_name=prod.get("name"),
                 quantity=i["quantity"],
                 unit_price=i["unit_price"],
                 subtotal=i["subtotal"],
             ))
 
-        client_name = person_data.get("trade_name") or person_data.get("name")
+        client_name = client_data.get("trade_name") or client_data.get("name")
 
         return Order(
             id=raw["id"],

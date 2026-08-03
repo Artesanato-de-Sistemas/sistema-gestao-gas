@@ -1,28 +1,18 @@
-import { useState } from 'react';
-import { Card, Input, Button, Select, Table, Tag, Modal, Space, Typography, Row, Col, message } from 'antd';
+import { useState, useEffect } from 'react';
+import { Card, Input, Button, Select, Table, Tag, Modal, Typography, message } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { Product, StockMovement } from '@/types';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 import { Box, History, ArrowDownToLine, ArrowUpFromLine, Settings2, Search } from 'lucide-react';
+import { api } from '@/services/api';
 
 const { Text, Title } = Typography;
 
-const mockProducts: Product[] = [
-  { id: '1', name: 'Botijão P13 (Cheio)', current_price: 115.00, active: true, stock_quantity: 245, updated_at: '2023-10-05T14:30:00Z' },
-  { id: '2', name: 'Botijão P20 (Cheio)', current_price: 180.00, active: true, stock_quantity: 12, updated_at: '2023-10-06T09:15:00Z' },
-  { id: '3', name: 'Cilindro P45 (Cheio)', current_price: 450.00, active: true, stock_quantity: 3, updated_at: '2023-10-02T11:00:00Z' },
-  { id: '4', name: 'Casco P13 (Vazio)', current_price: 0, active: true, stock_quantity: 89, updated_at: '2023-10-07T16:45:00Z' },
-];
-
-const mockMovements: StockMovement[] = [
-  { id: 'm1', product_id: '1', movement_type: 'ENTRADA', quantity: 50, notes: 'Recebimento NF 1234', created_at: '2023-10-07T08:00:00Z' },
-  { id: 'm2', product_id: '1', movement_type: 'SAIDA', quantity: 15, notes: 'Vendas do dia', created_at: '2023-10-07T18:00:00Z' },
-  { id: 'm3', product_id: '3', movement_type: 'AJUSTE', quantity: -1, notes: 'Produto danificado', created_at: '2023-10-06T14:20:00Z' },
-];
-
 export function Stock() {
-  const [products, setProducts] = useState<Product[]>(mockProducts);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [movements, setMovements] = useState<StockMovement[]>([]);
   const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(false);
   
   // Modals state
   const [isAdjustmentOpen, setIsAdjustmentOpen] = useState(false);
@@ -35,6 +25,34 @@ export function Stock() {
   const [adjQuantity, setAdjQuantity] = useState('');
   const [adjNotes, setAdjNotes] = useState('');
 
+  const fetchProducts = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get('/products');
+      setProducts(res.data);
+    } catch (error) {
+      console.error(error);
+      message.error('Erro ao buscar produtos');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchMovements = async () => {
+    try {
+      const res = await api.get('/stock/movements');
+      setMovements(res.data);
+    } catch (error) {
+      console.error(error);
+      message.error('Erro ao buscar movimentações');
+    }
+  };
+
+  useEffect(() => {
+    fetchProducts();
+    fetchMovements();
+  }, []);
+
   const openAdjustment = (prod: Product) => {
     setSelectedProduct(prod);
     setAdjType('ENTRADA');
@@ -43,22 +61,33 @@ export function Stock() {
     setIsAdjustmentOpen(true);
   };
 
-  const handleSaveAdjustment = () => {
+  const handleSaveAdjustment = async () => {
     if (!selectedProduct || !adjQuantity) return;
     
     let diff = Number(adjQuantity);
     if (adjType === 'SAIDA' || (adjType === 'AJUSTE' && diff < 0)) {
-        diff = -Math.abs(diff); // ensure negative if it's a reduction
+        diff = -Math.abs(diff);
     } else {
         diff = Math.abs(diff);
     }
     
-    setProducts(products.map(p => 
-        p.id === selectedProduct.id ? { ...p, stock_quantity: p.stock_quantity + diff } : p
-    ));
-    
-    setIsAdjustmentOpen(false);
-    message.success('Movimentação registrada com sucesso!');
+    const payload = {
+      product_id: selectedProduct.id,
+      movement_type: adjType,
+      quantity: diff,
+      notes: adjNotes
+    };
+
+    try {
+      await api.post(`/products/${selectedProduct.id}/movements`, payload);
+      message.success('Movimentação registrada com sucesso!');
+      setIsAdjustmentOpen(false);
+      fetchProducts();
+      fetchMovements();
+    } catch (error) {
+      console.error(error);
+      message.error('Erro ao registrar movimentação');
+    }
   };
 
   const filteredProducts = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
@@ -70,7 +99,7 @@ export function Stock() {
       render: (_, record) => (
         <div>
           <p className="font-semibold text-slate-800 m-0">{record.name}</p>
-          <p className="text-xs text-slate-500 m-0 mt-1">Atualizado em {formatDate(record.updated_at)}</p>
+          <p className="text-xs text-slate-500 m-0 mt-1">Atualizado em {formatDate(record.updated_at || new Date().toISOString())}</p>
         </div>
       )
     },
@@ -158,7 +187,7 @@ export function Stock() {
         const p = products.find(prod => prod.id === record.product_id);
         return (
           <div className="text-sm text-slate-500">
-            <div className="font-medium text-slate-700 text-xs mb-0.5">{p?.name}</div>
+            <div className="font-medium text-slate-700 text-xs mb-0.5">{p?.name || record.product_id}</div>
             {record.notes}
           </div>
         )
@@ -209,6 +238,7 @@ export function Stock() {
           dataSource={filteredProducts}
           rowKey="id"
           pagination={false}
+          loading={loading}
           className="w-full"
         />
       </Card>
@@ -292,7 +322,7 @@ export function Stock() {
         <div className="max-h-[60vh] overflow-y-auto w-full pt-4">
           <Table
             columns={historyColumns}
-            dataSource={mockMovements}
+            dataSource={movements}
             rowKey="id"
             pagination={false}
             className="w-full font-sans"

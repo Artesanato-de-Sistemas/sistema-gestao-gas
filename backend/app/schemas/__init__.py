@@ -1,4 +1,4 @@
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Any
 from pydantic import BaseModel, Field
 from datetime import datetime
 
@@ -17,9 +17,11 @@ class TokenResponse(BaseModel):
 
 
 # ─── Products ────────────────────────────────────────────────────────────────
+# Tabela: products (criada pela migração)
 
 class ProductBase(BaseModel):
     name: str
+    category: Optional[str] = None
     current_price: float = 0.0
     active: bool = True
 
@@ -30,19 +32,21 @@ class ProductCreate(ProductBase):
 
 class ProductUpdate(BaseModel):
     name: Optional[str] = None
+    category: Optional[str] = None
     current_price: Optional[float] = None
     active: Optional[bool] = None
 
 
 class Product(ProductBase):
     id: str
-    stock_quantity: int
+    stock_quantity: int = 0
     updated_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 
 
 # ─── Stock Movements ─────────────────────────────────────────────────────────
+# Tabela: stock_movements (criada pela migração)
 
 class StockMovementCreate(BaseModel):
     product_id: str
@@ -59,37 +63,51 @@ class StockMovement(StockMovementCreate):
 
 
 # ─── Inbounds ────────────────────────────────────────────────────────────────
+# Tabela: inbounds + inbound_items (schema real)
 
-class InboundItem(BaseModel):
-    type: Literal["P13", "P20", "P45"]
-    condition: Literal["NOVO", "USADO"]
-    status: Literal["OK", "DEFEITUOSO"]
+class InboundItemCreate(BaseModel):
+    """Item de entrada mapeado ao schema real do banco (inbound_items)."""
+    category: Literal["P13", "P20", "P45", "CASCO"]   # = tipo do botijão
     quantity: int = Field(gt=0)
-    unitPrice: float = Field(ge=0)
+    unit_cost: float = Field(ge=0)                      # unitPrice
 
 
-class InboundPayload(BaseModel):
+class InboundItemResponse(InboundItemCreate):
+    id: str
+    inbound_id: str
+    available_quantity: Optional[int] = None
+    subtotal: Optional[float] = None
+
+    model_config = {"from_attributes": True}
+
+
+class InboundCreate(BaseModel):
+    """Payload compatível com o frontend (truckPlate, invoice, items)."""
     truckPlate: str = Field(min_length=1)
-    invoice: str = Field(min_length=1)
-    items: List[InboundItem] = Field(min_length=1)
+    invoice: str = Field(min_length=1, alias="invoice")
+    items: List[InboundItemCreate] = Field(min_length=1)
+
+    model_config = {"populate_by_name": True}
 
 
 class InboundResponse(BaseModel):
     id: str
-    truckPlate: str
-    invoice: str
+    truck_plate: str
+    invoice_number: str
     total_amount: float
+    status: str
     created_at: Optional[datetime] = None
-    items: List[InboundItem]
+    items: List[InboundItemResponse] = []
 
     model_config = {"from_attributes": True}
 
 
 # ─── Employees ───────────────────────────────────────────────────────────────
+# Tabela: employees (criada pela migração)
 
 class EmployeeBase(BaseModel):
     name: str
-    document: str
+    document: Optional[str] = None
     phone: Optional[str] = None
     role: Literal["ENTREGADOR", "SECRETARIO"]
     active: bool = True
@@ -116,13 +134,45 @@ class Employee(EmployeeBase):
     model_config = {"from_attributes": True}
 
 
+# ─── Delivery Drivers ────────────────────────────────────────────────────────
+# Tabela: delivery_drivers (reestruturada pela migração)
+
+class DriverBase(BaseModel):
+    name: str
+    document: Optional[str] = None
+    phone: Optional[str] = None
+    commission_percentage: float = 0.0
+    active: bool = True
+
+
+class DriverCreate(DriverBase):
+    pass
+
+
+class DriverUpdate(BaseModel):
+    name: Optional[str] = None
+    document: Optional[str] = None
+    phone: Optional[str] = None
+    commission_percentage: Optional[float] = None
+    active: Optional[bool] = None
+
+
+class Driver(DriverBase):
+    id: str
+    created_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
 # ─── Clients ─────────────────────────────────────────────────────────────────
+# Tabela: clients (reestruturada pela migração — flat, sem people)
 
 class ClientBase(BaseModel):
     name: str
     document: str
     phone: Optional[str] = None
-    person_type: Literal["FISICA", "JURIDICA"]
+    email: Optional[str] = None
+    person_type: Literal["FISICA", "JURIDICA"] = "FISICA"
     trade_name: Optional[str] = None
     payment_deadline_days: int = 0
     active: bool = True
@@ -136,6 +186,7 @@ class ClientUpdate(BaseModel):
     name: Optional[str] = None
     document: Optional[str] = None
     phone: Optional[str] = None
+    email: Optional[str] = None
     person_type: Optional[Literal["FISICA", "JURIDICA"]] = None
     trade_name: Optional[str] = None
     payment_deadline_days: Optional[int] = None
@@ -144,8 +195,8 @@ class ClientUpdate(BaseModel):
 
 class Client(ClientBase):
     id: str
-    person_id: Optional[str] = None
     created_at: Optional[datetime] = None
+    # Métricas computadas
     isInadimplente: Optional[bool] = False
     revenue: Optional[float] = 0.0
     purchasesCount: Optional[int] = 0
@@ -154,9 +205,11 @@ class Client(ClientBase):
 
 
 # ─── Orders ──────────────────────────────────────────────────────────────────
+# Tabela: orders + order_items (schema real)
 
 class OrderItemCreate(BaseModel):
-    product_id: str
+    product_id: Optional[str] = None        # FK → products (após migração)
+    inbound_item_id: Optional[str] = None   # FK → inbound_items (schema atual)
     quantity: int = Field(gt=0)
     unit_price: float = Field(ge=0)
 
@@ -205,12 +258,10 @@ class DashboardMetrics(BaseModel):
     overdue_invoices: int = 0
 
 
-# ─── Drivers Financial Report ────────────────────────────────────────────────
-
 class DriverFinancialReport(BaseModel):
     driverId: str
     driverName: str
-    cylindersSold: int
-    grossAmount: float
-    withdrawals: float
-    netProfit: float
+    cylindersSold: int = 0
+    grossAmount: float = 0.0
+    withdrawals: float = 0.0
+    netProfit: float = 0.0

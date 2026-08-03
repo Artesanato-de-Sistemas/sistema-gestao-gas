@@ -12,7 +12,6 @@ class DashboardService:
         supabase = get_supabase()
         today = date.today().isoformat()
 
-        # Stock levels
         products_resp = supabase.table("products").select("name, stock_quantity").eq("active", True).execute()
         stock_p13, stock_p20, stock_p45 = 0, 0, 0
         for p in products_resp.data or []:
@@ -24,7 +23,6 @@ class DashboardService:
             elif "P45" in name:
                 stock_p45 += p.get("stock_quantity", 0)
 
-        # Sales today
         orders_resp = (
             supabase.table("orders")
             .select("total_amount, status")
@@ -36,7 +34,6 @@ class DashboardService:
         sales_today = sum(o["total_amount"] for o in orders_today if o["status"] != "CANCELADO")
         orders_count = len([o for o in orders_today if o["status"] != "CANCELADO"])
 
-        # Overdue invoices (ABERTO orders past due_date)
         overdue_resp = (
             supabase.table("orders")
             .select("id")
@@ -56,7 +53,6 @@ class DashboardService:
         )
 
     def get_driver_reports(self, period: str = "Hoje") -> List[DriverFinancialReport]:
-        """Aggregates per-driver financial data for the given period."""
         supabase = get_supabase()
         today = date.today()
 
@@ -64,12 +60,12 @@ class DashboardService:
             start = today.isoformat()
         elif period == "Semana":
             start = (today - timedelta(days=7)).isoformat()
-        else:  # Mês
+        else:
             start = (today - timedelta(days=30)).isoformat()
 
         orders_resp = (
             supabase.table("orders")
-            .select("delivery_driver_id, total_amount, employees(name)")
+            .select("delivery_driver_id, total_amount, delivery_drivers(name)")
             .neq("status", "CANCELADO")
             .gte("created_at", f"{start}T00:00:00")
             .execute()
@@ -80,8 +76,10 @@ class DashboardService:
             driver_id = order.get("delivery_driver_id")
             if not driver_id:
                 continue
-            employee = order.get("employees") or {}
-            driver_name = employee.get("name", "Desconhecido")
+            
+            driver_info = order.get("delivery_drivers") or {}
+            driver_name = driver_info.get("name", "Desconhecido")
+            
             if driver_id not in driver_map:
                 driver_map[driver_id] = {
                     "driverId": driver_id,
@@ -94,7 +92,6 @@ class DashboardService:
             driver_map[driver_id]["grossAmount"] += order["total_amount"]
             driver_map[driver_id]["netProfit"] += order["total_amount"]
 
-        # Fetch withdrawals (sangrias) — assuming a 'withdrawals' table
         try:
             withdrawals_resp = (
                 supabase.table("withdrawals")
@@ -108,6 +105,6 @@ class DashboardService:
                     driver_map[eid]["withdrawals"] += w["amount"]
                     driver_map[eid]["netProfit"] -= w["amount"]
         except Exception:
-            pass  # withdrawals table may not exist yet
+            pass 
 
         return [DriverFinancialReport(**v) for v in driver_map.values()]

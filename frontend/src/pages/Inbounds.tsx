@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { Card, Input, Button, Select, List, Typography, Divider, Space, message } from 'antd';
+import { Card, Input, Button, Select, List, Typography, message } from 'antd';
 import { InboundItem, InboundPayload } from '@/types';
 import { formatCurrency } from '@/utils/formatters';
+import { maskPlate, maskNFInput, maskCurrency, parseCurrency } from '@/utils/masks';
 import { Truck, Plus, Check, ListChecks } from 'lucide-react';
+import { api } from '@/services/api';
 
 const { Title, Text } = Typography;
 
@@ -10,39 +12,35 @@ export function Inbounds() {
   const [truckPlate, setTruckPlate] = useState('');
   const [invoice, setInvoice] = useState('');
   
-  const [type, setType] = useState<InboundItem['type']>('P13');
-  const [condition, setCondition] = useState<InboundItem['condition']>('NOVO');
-  const [status, setStatus] = useState<InboundItem['status']>('OK');
+  const [category, setCategory] = useState<InboundItem['category']>('P13');
   const [quantity, setQuantity] = useState('');
-  const [unitPrice, setUnitPrice] = useState('');
+  const [unitCostStr, setUnitCostStr] = useState('');
   
   const [items, setItems] = useState<InboundItem[]>([]);
+  const [loading, setLoading] = useState(false);
 
   const handleAddMore = () => {
-    if (!quantity || !unitPrice) {
-        message.warning("Preencha quantidade e valor unitário.");
+    const parsedCost = parseCurrency(unitCostStr);
+    if (!quantity || parsedCost <= 0) {
+        message.warning("Preencha quantidade e valor unitário válido.");
         return;
     }
     
     const newItem: InboundItem = {
-      type,
-      condition,
-      status,
+      category,
       quantity: Number(quantity),
-      unitPrice: Number(unitPrice),
+      unit_cost: parsedCost,
     };
     
     setItems([...items, newItem]);
     
     // Clear product fields
     setQuantity('');
-    setUnitPrice('');
-    setType('P13');
-    setCondition('NOVO');
-    setStatus('OK');
+    setUnitCostStr('');
+    setCategory('P13');
   };
 
-  const handleFinalizar = () => {
+  const handleFinalizar = async () => {
     if (!truckPlate || !invoice) {
         message.warning("Placa e Nota Fiscal são obrigatórios para finalizar.");
         return;
@@ -58,16 +56,24 @@ export function Inbounds() {
       items,
     };
     
-    console.log('Sending payload:', payload);
-    message.success('Entrada cadastrada com sucesso!');
-    
-    // Clear all
-    setTruckPlate('');
-    setInvoice('');
-    setItems([]);
+    try {
+      setLoading(true);
+      await api.post('/inbounds', payload);
+      message.success('Entrada cadastrada com sucesso!');
+      
+      // Clear all
+      setTruckPlate('');
+      setInvoice('');
+      setItems([]);
+    } catch (error) {
+      console.error(error);
+      message.error('Erro ao cadastrar entrada');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const totalValue = items.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
+  const totalValue = items.reduce((acc, item) => acc + (item.quantity * item.unit_cost), 0);
   const totalItems = items.reduce((acc, item) => acc + item.quantity, 0);
 
   return (
@@ -77,7 +83,7 @@ export function Inbounds() {
             <Truck className="w-6 h-6 text-orange-500" />
             Registro de Entrada
         </h2>
-        <p className="text-slate-500 mt-1 mb-0">Cadastre o recebimento de botijões e defina suas condições.</p>
+        <p className="text-slate-500 mt-1 mb-0">Cadastre o recebimento de botijões.</p>
       </div>
 
       <div className="grid gap-8 md:grid-cols-2">
@@ -90,16 +96,21 @@ export function Inbounds() {
                             className="h-10 rounded-lg"
                             placeholder="AAA-0000"
                             value={truckPlate}
-                            onChange={(e) => setTruckPlate(e.target.value.toUpperCase())}
+                            onChange={(e) => setTruckPlate(maskPlate(e.target.value))}
                         />
                     </div>
                     <div className="space-y-1.5">
                         <label className="text-slate-600 font-medium">Nota Fiscal (NF)</label>
                         <Input
                             className="h-10 rounded-lg"
-                            placeholder="Número da NF"
+                            placeholder="NF00000000"
                             value={invoice}
-                            onChange={(e) => setInvoice(e.target.value)}
+                            onChange={(e) => setInvoice(maskNFInput(e.target.value))}
+                            onBlur={() => {
+                               if (invoice && invoice !== 'NF') {
+                                 setInvoice(`NF${invoice.replace(/\D/g, '').padStart(8, '0')}`);
+                               }
+                            }}
                         />
                     </div>
                 </div>
@@ -107,43 +118,19 @@ export function Inbounds() {
 
             <Card title="Adicionar Item" className="border-slate-100 shadow-sm rounded-2xl">
                 <div className="space-y-5">
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                            <label className="text-slate-600 font-medium">Tipo de Produto</label>
-                            <Select 
-                                value={type} 
-                                onChange={setType}
-                                className="w-full h-10"
-                                options={[
-                                    { value: 'P13', label: 'Botijão P13' },
-                                    { value: 'P20', label: 'Botijão P20' },
-                                    { value: 'P45', label: 'Cilindro P45' }
-                                ]}
-                            />
-                        </div>
-                        <div className="space-y-1.5">
-                            <label className="text-slate-600 font-medium">Condição</label>
-                            <Select 
-                                value={condition} 
-                                onChange={setCondition}
-                                className="w-full h-10"
-                                options={[
-                                    { value: 'NOVO', label: 'Novo' },
-                                    { value: 'USADO', label: 'Usado' }
-                                ]}
-                            />
-                        </div>
-                    </div>
-
                     <div className="space-y-1.5">
-                        <label className="text-slate-600 font-medium">Status</label>
+                        <label className="text-slate-600 font-medium">Tipo/Categoria de Produto</label>
                         <Select 
-                            value={status} 
-                            onChange={setStatus}
+                            value={category} 
+                            onChange={setCategory}
                             className="w-full h-10"
                             options={[
-                                { value: 'OK', label: 'OK' },
-                                { value: 'DEFEITUOSO', label: 'Defeituoso' }
+                                { value: 'P13', label: 'Botijão P13 (Cheio)' },
+                                { value: 'P20', label: 'Botijão P20 (Cheio)' },
+                                { value: 'P45', label: 'Cilindro P45 (Cheio)' },
+                                { value: 'CASCO', label: 'Casco P13 (Vazio)' },
+                                { value: 'CASCO_P20', label: 'Casco P20 (Vazio)' },
+                                { value: 'CASCO_P45', label: 'Casco P45 (Vazio)' }
                             ]}
                         />
                     </div>
@@ -161,15 +148,12 @@ export function Inbounds() {
                             />
                         </div>
                         <div className="space-y-1.5">
-                            <label className="text-slate-600 font-medium">Valor Unitário (R$)</label>
+                            <label className="text-slate-600 font-medium">Custo Unitário (R$)</label>
                             <Input
-                                type="number"
-                                min={0}
-                                step="0.01"
                                 placeholder="0,00"
                                 className="h-10 rounded-lg"
-                                value={unitPrice}
-                                onChange={(e) => setUnitPrice(e.target.value)}
+                                value={unitCostStr}
+                                onChange={(e) => setUnitCostStr(maskCurrency(e.target.value))}
                             />
                         </div>
                     </div>
@@ -177,7 +161,7 @@ export function Inbounds() {
                     <Button 
                         onClick={handleAddMore} 
                         className="w-full h-10 rounded-lg mt-2 font-medium"
-                        disabled={!quantity || !unitPrice}
+                        disabled={!quantity || !unitCostStr}
                     >
                         <Plus className="w-4 h-4 mr-2" />
                         Adicionar à lista
@@ -212,14 +196,11 @@ export function Inbounds() {
                                 <List.Item className="px-6 py-4 border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
                                     <div className="flex justify-between w-full items-center">
                                         <div>
-                                            <p className="font-semibold text-slate-700 m-0">{item.quantity}x {item.type}</p>
-                                            <p className="text-xs text-slate-400 mt-1 m-0">
-                                                {item.condition} • {item.status}
-                                            </p>
+                                            <p className="font-semibold text-slate-700 m-0">{item.quantity}x {item.category}</p>
                                         </div>
                                         <div className="text-right">
-                                            <p className="font-medium text-slate-800 m-0">{formatCurrency(item.quantity * item.unitPrice)}</p>
-                                            <p className="text-xs text-slate-400 mt-1 m-0">{formatCurrency(item.unitPrice)}/un</p>
+                                            <p className="font-medium text-slate-800 m-0">{formatCurrency(item.quantity * item.unit_cost)}</p>
+                                            <p className="text-xs text-slate-400 mt-1 m-0">{formatCurrency(item.unit_cost)}/un</p>
                                         </div>
                                     </div>
                                 </List.Item>
@@ -241,7 +222,8 @@ export function Inbounds() {
                         type="primary"
                         onClick={handleFinalizar} 
                         className="w-full h-11 rounded-lg font-medium text-base shadow-sm"
-                        disabled={items.length === 0 || !truckPlate || !invoice}
+                        disabled={items.length === 0 || !truckPlate || !invoice || loading}
+                        loading={loading}
                         icon={<Check className="w-4 h-4" />}
                     >
                         Finalizar Entrada

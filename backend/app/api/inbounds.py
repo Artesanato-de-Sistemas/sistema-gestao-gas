@@ -1,6 +1,6 @@
 from typing import List
 from fastapi import APIRouter, Depends
-from app.schemas import InboundPayload, InboundResponse
+from app.schemas import InboundCreate, InboundResponse
 from app.services.inbound_service import InboundService
 from app.core.security import get_current_user
 
@@ -20,7 +20,7 @@ def list_inbounds(_: dict = Depends(get_current_user)):
     status_code=201,
     summary="Registra uma entrada de botijões",
 )
-def create_inbound(payload: InboundPayload, _: dict = Depends(get_current_user)):
+def create_inbound(payload: InboundCreate, _: dict = Depends(get_current_user)):
     """
     Registra o recebimento de botijões:
     - Persiste cabeçalho (placa, NF) e itens

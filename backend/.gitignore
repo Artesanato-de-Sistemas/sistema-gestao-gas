@@ -1,5 +1,12 @@
-# Ignore Gradle project-specific cache directory
-.gradle
-
-# Ignore Gradle build output directory
-build
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.coverage
+htmlcov/

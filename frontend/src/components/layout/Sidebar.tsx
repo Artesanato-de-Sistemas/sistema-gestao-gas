@@ -17,7 +17,7 @@ export function Sidebar({ isOpen, toggle }: { isOpen: boolean; toggle: () => voi
 
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
-
+  
   return (
     <aside
       className={cn(
@@ -31,7 +31,7 @@ export function Sidebar({ isOpen, toggle }: { isOpen: boolean; toggle: () => voi
             <img src="/logo.png" alt="" className="h-10 w-auto object-contain" referrerPolicy="no-referrer" />
           </div>
         )}
-        <Button type="text" onClick={toggle} className={cn("text-white hover:!bg-white/20 hover:!text-white shrink-0 z-10 flex items-center justify-center p-0 w-8 h-8", isOpen ? "absolute right-2" : "")} icon={<Menu className="w-5 h-5" />} />
+        <Button type="text" onClick={toggle} className={cn("text-white hover:!bg-white/20 hover:!text-white shrink-0 z-10 flex items-center justify-center p-0 w-8 h-8", isOpen ? "absolute right-2" : "")} icon={<Menu className="w-5 h-5" color="white" />} />
       </div>
 
       <nav className="flex-1 py-4 overflow-y-auto space-y-1 px-3">
@@ -67,14 +67,14 @@ export function Sidebar({ isOpen, toggle }: { isOpen: boolean; toggle: () => voi
                  {user?.name || 'Vendedor'}
                </span>
             </div>
-            <Button type="text" onClick={logout} title="Sair" className="text-white hover:!bg-white/20 hover:!text-white shrink-0 flex items-center justify-center p-0 w-8 h-8" icon={<LogOut className="w-5 h-5" />} />
+            <Button type="text" onClick={logout} title="Sair" className="text-white hover:!bg-white/20 hover:!text-white shrink-0 flex items-center justify-center p-0 w-8 h-8" icon={<LogOut className="w-5 h-5" color="white" />} />
           </div>
         ) : (
           <div className="flex flex-col gap-4 items-center">
             <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-white shrink-0 cursor-pointer" title={user?.name || 'Vendedor'}>
               <UserIcon className="w-4 h-4" />
             </div>
-            <Button type="text" onClick={logout} title="Sair" className="text-white hover:!bg-white/20 hover:!text-white shrink-0 flex items-center justify-center p-0 w-8 h-8" icon={<LogOut className="w-4 h-4" />} />
+            <Button type="text" onClick={logout} title="Sair" className="text-white hover:!bg-white/20 hover:!text-white shrink-0 flex items-center justify-center p-0 w-8 h-8" icon={<LogOut className="w-5 h-5" color="white" />} />
           </div>
         )}
       </div>

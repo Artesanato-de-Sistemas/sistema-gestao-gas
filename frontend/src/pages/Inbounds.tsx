@@ -12,7 +12,7 @@ export function Inbounds() {
   const [truckPlate, setTruckPlate] = useState('');
   const [invoice, setInvoice] = useState('');
   
-  const [category, setCategory] = useState<InboundItem['category']>('P13');
+  const [category, setCategory] = useState<InboundItem['category']>('GLP_13KG_CHEIO');
   const [quantity, setQuantity] = useState('');
   const [unitCostStr, setUnitCostStr] = useState('');
   
@@ -37,7 +37,7 @@ export function Inbounds() {
     // Clear product fields
     setQuantity('');
     setUnitCostStr('');
-    setCategory('P13');
+    setCategory('GLP_13KG_CHEIO');
   };
 
   const handleFinalizar = async () => {
@@ -125,12 +125,12 @@ export function Inbounds() {
                             onChange={setCategory}
                             className="w-full h-10"
                             options={[
-                                { value: 'P13', label: 'Botijão P13 (Cheio)' },
-                                { value: 'P20', label: 'Botijão P20 (Cheio)' },
-                                { value: 'P45', label: 'Cilindro P45 (Cheio)' },
-                                { value: 'CASCO', label: 'Casco P13 (Vazio)' },
-                                { value: 'CASCO_P20', label: 'Casco P20 (Vazio)' },
-                                { value: 'CASCO_P45', label: 'Casco P45 (Vazio)' }
+                                { value: 'GLP_13KG_CHEIO', label: 'Botijão P13 (Cheio)' },
+                                { value: 'GLP_20KG_CHEIO', label: 'Botijão P20 (Cheio)' },
+                                { value: 'GLP_45KG_CHEIO', label: 'Cilindro P45 (Cheio)' },
+                                { value: 'GLP_13KG_VAZIO', label: 'Casco P13 (Vazio)' },
+                                { value: 'GLP_20KG_VAZIO', label: 'Casco P20 (Vazio)' },
+                                { value: 'GLP_45KG_VAZIO', label: 'Casco P45 (Vazio)' }
                             ]}
                         />
                     </div>

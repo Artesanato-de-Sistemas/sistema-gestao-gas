@@ -46,7 +46,7 @@ class OrderService:
         supabase = get_supabase()
 
         total_amount = sum(item.quantity * item.unit_price for item in data.items)
-        order_status = "ABERTO" if data.sale_type == "A PRAZO" else "FINALIZADO"
+        order_status = "ABERTO" if data.sale_type == "FIADO" else "ENTREGUE"
 
         order_payload = {
             "client_id": data.client_id,
@@ -73,7 +73,6 @@ class OrderService:
                 "inbound_item_id": item.inbound_item_id,
                 "quantity": item.quantity,
                 "unit_price": item.unit_price,
-                "subtotal": item.quantity * item.unit_price,
             })
 
             if item.product_id:

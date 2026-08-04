@@ -30,7 +30,6 @@ class InboundService:
                 "category": item.category,
                 "quantity": item.quantity,
                 "unit_cost": item.unit_cost,
-                "subtotal": item.quantity * item.unit_cost,
                 "available_quantity": item.quantity
             })
 

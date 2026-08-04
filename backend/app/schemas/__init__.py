@@ -67,7 +67,7 @@ class StockMovement(StockMovementCreate):
 
 class InboundItemCreate(BaseModel):
     """Item de entrada mapeado ao schema real do banco (inbound_items)."""
-    category: Literal["P13", "P20", "P45", "CASCO"]   # = tipo do botijão
+    category: Literal["GLP_13KG_CHEIO", "GLP_13KG_VAZIO", "GLP_20KG_CHEIO", "GLP_20KG_VAZIO", "GLP_45KG_CHEIO", "GLP_45KG_VAZIO"]
     quantity: int = Field(gt=0)
     unit_cost: float = Field(ge=0)                      # unitPrice
 
@@ -167,6 +167,25 @@ class Driver(DriverBase):
 # ─── Clients ─────────────────────────────────────────────────────────────────
 # Tabela: clients (reestruturada pela migração — flat, sem people)
 
+class AddressBase(BaseModel):
+    street: str
+    number: Optional[str] = None
+    neighborhood: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zipcode: Optional[str] = None
+    complement: Optional[str] = None
+    is_primary: bool = True
+
+class AddressCreate(AddressBase):
+    pass
+
+class AddressResponse(AddressBase):
+    id: str
+    client_id: str
+    created_at: Optional[datetime] = None
+    model_config = {"from_attributes": True}
+
 class ClientBase(BaseModel):
     name: str
     document: str
@@ -179,7 +198,7 @@ class ClientBase(BaseModel):
 
 
 class ClientCreate(ClientBase):
-    pass
+    address: Optional[AddressCreate] = None
 
 
 class ClientUpdate(BaseModel):
@@ -200,6 +219,7 @@ class Client(ClientBase):
     isInadimplente: Optional[bool] = False
     revenue: Optional[float] = 0.0
     purchasesCount: Optional[int] = 0
+    addresses: Optional[List[AddressResponse]] = None
 
     model_config = {"from_attributes": True}
 
@@ -226,7 +246,7 @@ class OrderItem(OrderItemCreate):
 class OrderCreate(BaseModel):
     client_id: str
     delivery_driver_id: Optional[str] = None
-    sale_type: Literal["A VISTA", "A PRAZO", "CARTAO"]
+    sale_type: Literal["AVISTA", "FIADO", "CARTAO"]
     due_date: Optional[str] = None
     items: List[OrderItemCreate] = Field(min_length=1)
 
@@ -238,7 +258,7 @@ class Order(BaseModel):
     delivery_driver_id: Optional[str] = None
     driver_name: Optional[str] = None
     sale_type: str
-    status: Literal["ABERTO", "FINALIZADO", "CANCELADO"]
+    status: Literal["ABERTO", "ENTREGUE", "CANCELADO"]
     due_date: Optional[str] = None
     total_amount: float
     created_at: Optional[datetime] = None

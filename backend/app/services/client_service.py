@@ -33,14 +33,31 @@ class ClientService:
 
     def create_client(self, data: ClientCreate) -> Client:
         supabase = get_supabase()
+        
+        # Extract address if present
+        address_data = None
+        payload = data.model_dump(exclude={"address"})
+        if data.address:
+            address_data = data.address.model_dump()
+
         # Direct atomic insert into clients table
-        response = supabase.table("clients").insert(data.model_dump()).execute()
+        response = supabase.table("clients").insert(payload).execute()
         if not response.data:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Erro ao criar cliente.",
             )
-        return Client(**response.data[0])
+        
+        client_record = response.data[0]
+        
+        # If address exists, insert it
+        if address_data:
+            address_data["client_id"] = client_record["id"]
+            addr_response = supabase.table("addresses").insert(address_data).execute()
+            if addr_response.data:
+                client_record["addresses"] = addr_response.data
+
+        return Client(**client_record)
 
     def update_client(self, client_id: str, data: ClientUpdate) -> Client:
         supabase = get_supabase()

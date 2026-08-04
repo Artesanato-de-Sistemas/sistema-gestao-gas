@@ -24,7 +24,7 @@ export interface StockMovement {
 
 export interface InboundItem {
   id?: string;
-  category: 'P13' | 'P20' | 'P45' | 'CASCO';
+  category: 'GLP_13KG_CHEIO' | 'GLP_13KG_VAZIO' | 'GLP_20KG_CHEIO' | 'GLP_20KG_VAZIO' | 'GLP_45KG_CHEIO' | 'GLP_45KG_VAZIO';
   quantity: number;
   unit_cost: number;
 }
@@ -99,7 +99,7 @@ export interface Order {
   delivery_driver_id?: string;
   driver_name?: string;
   sale_type: string;
-  status: 'ABERTO' | 'FINALIZADO' | 'CANCELADO';
+  status: 'ABERTO' | 'ENTREGUE' | 'CANCELADO';
   due_date?: string;
   total_amount: number;
   created_at: string;

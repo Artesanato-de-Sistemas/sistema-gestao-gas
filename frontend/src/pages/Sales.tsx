@@ -46,7 +46,7 @@ export function Sales() {
   const [isNewOrderOpen, setIsNewOrderOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState("");
   const [selectedDriver, setSelectedDriver] = useState("none");
-  const [saleType, setSaleType] = useState("A VISTA");
+  const [saleType, setSaleType] = useState("AVISTA");
   const [orderItems, setOrderItems] = useState<
     { product_id: string; quantity: number; unit_price: number }[]
   >([]);
@@ -107,7 +107,7 @@ export function Sales() {
       setOrderItems([]);
       setSelectedClient("");
       setSelectedDriver("none");
-      setSaleType("A VISTA");
+      setSaleType("AVISTA");
       fetchData();
     } catch (error) {
       console.error(error);
@@ -173,7 +173,7 @@ export function Sales() {
       key: "status",
       align: 'center',
       render: (_, record) => {
-        if (record.status === "FINALIZADO") return <Tag color="success">Finalizado</Tag>;
+        if (record.status === "ENTREGUE") return <Tag color="success">Finalizado</Tag>;
         if (record.status === "ABERTO") return <Tag color="warning">Aberto (Fiado)</Tag>;
         if (record.status === "CANCELADO") return <Tag color="error">Cancelado</Tag>;
         return <Tag>{record.status}</Tag>;
@@ -310,8 +310,8 @@ export function Sales() {
                 onChange={setSaleType}
                 className="w-full h-10"
                 options={[
-                  { value: "A VISTA", label: "A Vista" },
-                  { value: "A PRAZO", label: "À Prazo / Fiado" },
+                  { value: "AVISTA", label: "A Vista" },
+                  { value: "FIADO", label: "À Prazo / Fiado" },
                   { value: "CARTAO", label: "Cartão / Pix" },
                 ]}
               />

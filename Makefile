@@ -1,36 +1,74 @@
 SHELL := /bin/bash
 
-.PHONY: up down rebuild logs ps health test lint format shell migrate makemigrations
+PYTHON   := backend/.venv/Scripts/python
+MANAGE   := $(PYTHON) backend/manage.py
+NPM      := npm
+BACKEND_PORT  ?= 8000
+FRONTEND_PORT ?= 3000
 
+.PHONY: up down backend frontend health shell migrate makemigrations lint format install
+
+## ── Ciclo de vida ─────────────────────────────────────────────────────────────
+
+# Sobe backend e frontend em segundo plano
 up:
-	docker compose up -d --build
+	@echo "▶ Subindo backend na porta $(BACKEND_PORT)..."
+	@cd backend && $(CURDIR)/backend/.venv/Scripts/python manage.py runserver $(BACKEND_PORT) &
+	@echo "▶ Subindo frontend na porta $(FRONTEND_PORT)..."
+	@cd frontend && npm run dev -- --port=$(FRONTEND_PORT) &
+	@echo ""
+	@echo "✅ Serviços iniciados:"
+	@echo "   Backend  → http://localhost:$(BACKEND_PORT)"
+	@echo "   Frontend → http://localhost:$(FRONTEND_PORT)"
+	@echo ""
+	@echo "   Para parar: make down"
 
+# Para os processos nas portas configuradas
 down:
-	docker compose down
+	@echo "⏹ Parando backend (porta $(BACKEND_PORT))..."
+	@-kill $$(lsof -t -i:$(BACKEND_PORT)) 2>/dev/null || true
+	@echo "⏹ Parando frontend (porta $(FRONTEND_PORT))..."
+	@-kill $$(lsof -t -i:$(FRONTEND_PORT)) 2>/dev/null || true
+	@echo "✅ Serviços parados."
 
-rebuild:
-	docker compose build --no-cache
+## ── Individuais ───────────────────────────────────────────────────────────────
 
-logs:
-	docker compose logs -f --tail=200
+backend:
+	cd backend && .venv/Scripts/python manage.py runserver $(BACKEND_PORT)
+
+frontend:
+	cd frontend && npm run dev -- --port=$(FRONTEND_PORT)
+
+## ── Verificações ──────────────────────────────────────────────────────────────
 
 health:
-	@curl -fsS http://localhost:$${BACKEND_PORT:-8000}/api/health >/dev/null
-	@echo "backend: ok"
-	@curl -fsS http://localhost:$${FRONTEND_PORT:-5173}/ >/dev/null
-	@echo "frontend: ok"
+	@curl -fsS http://localhost:$(BACKEND_PORT)/api/ > /dev/null && echo "backend:  ✅ ok" || echo "backend:  ❌ offline"
+	@curl -fsS http://localhost:$(FRONTEND_PORT)/ > /dev/null && echo "frontend: ✅ ok" || echo "frontend: ❌ offline"
 
-lint:
-	docker compose run --rm backend ruff check .
-
-format:
-	docker compose run --rm backend ruff format .
+## ── Django management ─────────────────────────────────────────────────────────
 
 shell:
-	docker compose run --rm backend python manage.py shell
+	cd backend && .venv/Scripts/python manage.py shell
 
 migrate:
-	docker compose run --rm backend python manage.py migrate
+	cd backend && .venv/Scripts/python manage.py migrate
 
 makemigrations:
-	docker compose run --rm backend python manage.py makemigrations
+	cd backend && .venv/Scripts/python manage.py makemigrations
+
+## ── Qualidade de código ───────────────────────────────────────────────────────
+
+lint:
+	cd backend && .venv/Scripts/python -m ruff check .
+
+format:
+	cd backend && .venv/Scripts/python -m ruff format .
+
+## ── Instalação ────────────────────────────────────────────────────────────────
+
+install:
+	@echo "▶ Instalando dependências do backend..."
+	cd backend && python -m venv .venv && .venv/Scripts/python -m pip install -r requirements.txt
+	@echo "▶ Instalando dependências do frontend..."
+	cd frontend && npm install
+	@echo "✅ Instalação concluída."

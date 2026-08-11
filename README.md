@@ -66,7 +66,6 @@ Para compreender melhor a arquitetura do projeto e as regras do negócio que gui
 
 - **[AGENTS.md](./AGENTS.md):** Contém as invariantes de negócio e os limites de arquitetura (ex: Frontend "burro", empréstimos vs ativos, regras de estoque).
 - **[ARCHITECTURE.md](./ARCHITECTURE.md):** Descreve a visão geral e os padrões internos adotados no backend Django.
-- **[Modelagem de Banco](./modelagem-de-banco.pdf):** Documento PDF contendo os detalhes do esquema do banco de dados.
 
 ## 🛡️ Invariantes do Sistema (Destaque)
 Apenas para reforçar as regras vitais do sistema:

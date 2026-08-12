@@ -105,16 +105,20 @@ USE_TZ = True
 STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# CORS Config (Permite requisições do frontend local)
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-]
-
-# Permite todos os headers/métodos necessários para o DRF
-CORS_ALLOW_ALL_ORIGINS = False
+# CORS Config
+# Em desenvolvimento (DEBUG=True): libera qualquer origem localhost/127.0.0.1.
+# Em produção: use CORS_ALLOWED_ORIGINS com os domínios reais.
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = False
+    CORS_ALLOWED_ORIGIN_REGEXES = [
+        r"^http://localhost(:\d+)?$",
+        r"^http://127\.0\.0\.1(:\d+)?$",
+    ]
+else:
+    CORS_ALLOW_ALL_ORIGINS = False
+    CORS_ALLOWED_ORIGINS = [
+        # Adicione os domínios de produção aqui
+    ]
 
 # Django REST Framework
 REST_FRAMEWORK = {

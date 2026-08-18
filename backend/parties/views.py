@@ -25,9 +25,15 @@ class ClientViewSet(SupabaseViewSet):
 
 
 class EmployeeViewSet(SupabaseViewSet):
+    """
+    ViewSet de funcionários.
+    Usa a tabela 'users' do Supabase, que contém os dados de funcionários
+    (role: ADMINISTRADOR, SECRETARIO, ENTREGADOR, etc.).
+    A tabela 'employees' foi planejada mas ainda não criada; 'users' serve o mesmo propósito.
+    """
     queryset = Employee.objects.all()
     serializer_class = EmployeeSerializer
-    table_name = 'employees'
+    table_name = 'users'  # Tabela real no Supabase (employees não existe ainda)
 
     def destroy(self, request, *args, **kwargs):
         """Soft delete — inativa ao invés de excluir fisicamente."""
@@ -35,7 +41,7 @@ class EmployeeViewSet(SupabaseViewSet):
             return Response({"error": "Supabase não configurado."}, status=500)
         pk = kwargs.get('pk')
         try:
-            supabase.table('employees').update({"active": False}).eq('id', pk).execute()
+            supabase.table('users').update({"active": False}).eq('id', pk).execute()
             return Response(status=status.HTTP_204_NO_CONTENT)
         except Exception as e:
             return Response({"error": str(e)}, status=500)
@@ -80,7 +86,7 @@ class DriversDashboardView(APIView):
                 since = now.replace(hour=0, minute=0, second=0, microsecond=0)
             elif period == 'Semana':
                 since = now - timedelta(days=7)
-            else:  # Mês
+            else:  # Mês ou Mes (sem acento — compatibilidade com clientes que não encodam URL)
                 since = now - timedelta(days=30)
 
             since_str = since.isoformat()

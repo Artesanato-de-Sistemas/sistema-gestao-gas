@@ -31,17 +31,24 @@ class LoginView(APIView):
 
         try:
             response = supabase.auth.sign_in_with_password({"email": email, "password": password})
-            user = response.user
             
-            user_email = user.email or ""
+            if not response.session:
+                return Response({"detail": "Falha ao iniciar sessão."}, status=status.HTTP_401_UNAUTHORIZED)
+                
+            user = response.user or response.session.user
+            if not user:
+                return Response({"detail": "Usuário não retornado."}, status=status.HTTP_401_UNAUTHORIZED)
+            
+            user_email = getattr(user, 'email', '') or ""
             user_name = user_email.split("@")[0] if user_email else "Usuário"
+            user_id = getattr(user, 'id', '')
 
             return Response(
                 {
                     "access_token": response.session.access_token,
                     "token_type": "bearer",
                     "user": {
-                        "id": user.id,
+                        "id": user_id,
                         "email": user_email,
                         "name": user_name,
                     },

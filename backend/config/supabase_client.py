@@ -1,5 +1,6 @@
 import os
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 from rest_framework import status, viewsets
@@ -21,7 +22,7 @@ def _sanitize(data) -> dict:
     Aceita tanto dict (de serializer.validated_data) quanto dict normal (de request.data).
     """
     if isinstance(data, dict):
-        result = {}
+        result: dict[str, Any] = {}
         for k, v in data.items():
             if isinstance(v, UUID):
                 result[k] = str(v)
@@ -42,7 +43,7 @@ class SupabaseViewSet(viewsets.ViewSet):
     está usando SQLite (apenas como stub para migrações).
     """
 
-    table_name = None
+    table_name: str = ""
     # Subclasses podem declarar serializer_class e queryset para compatibilidade,
     # mas eles não serão usados na lógica de leitura/escrita.
     serializer_class = None

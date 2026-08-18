@@ -1,9 +1,9 @@
 import os
 from decimal import Decimal
 from uuid import UUID
-from rest_framework import viewsets
+
+from rest_framework import status, viewsets
 from rest_framework.response import Response
-from rest_framework import status
 from supabase import create_client
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
@@ -41,6 +41,7 @@ class SupabaseViewSet(viewsets.ViewSet):
     com FKs do modelo Django que apontam para o banco Postgres (Supabase) mas o ORM
     está usando SQLite (apenas como stub para migrações).
     """
+
     table_name = None
     # Subclasses podem declarar serializer_class e queryset para compatibilidade,
     # mas eles não serão usados na lógica de leitura/escrita.
@@ -48,7 +49,7 @@ class SupabaseViewSet(viewsets.ViewSet):
     queryset = None
 
     # Campos que nunca devem ser enviados ao Supabase (gerados pelo banco ou FK aninhada)
-    READONLY_FIELDS = {'id', 'created_at', 'updated_at'}
+    READONLY_FIELDS = {"id", "created_at", "updated_at"}
 
     def _clean_payload(self, data: dict) -> dict:
         """Remove campos somente-leitura e sanitiza tipos."""
@@ -59,7 +60,7 @@ class SupabaseViewSet(viewsets.ViewSet):
         if not supabase:
             return Response({"error": "Supabase não configurado."}, status=500)
         try:
-            res = supabase.table(self.table_name).select('*').execute()
+            res = supabase.table(self.table_name).select("*").execute()
             return Response(res.data or [])
         except Exception as e:
             return Response({"error": str(e)}, status=500)
@@ -79,9 +80,9 @@ class SupabaseViewSet(viewsets.ViewSet):
     def retrieve(self, request, *args, **kwargs):
         if not supabase:
             return Response({"error": "Supabase não configurado."}, status=500)
-        pk = kwargs.get('pk')
+        pk = kwargs.get("pk")
         try:
-            res = supabase.table(self.table_name).select('*').eq('id', pk).execute()
+            res = supabase.table(self.table_name).select("*").eq("id", pk).execute()
             if not res.data:
                 return Response({"error": "Não encontrado."}, status=404)
             return Response(res.data[0])
@@ -92,10 +93,10 @@ class SupabaseViewSet(viewsets.ViewSet):
         """PUT — atualização completa."""
         if not supabase:
             return Response({"error": "Supabase não configurado."}, status=500)
-        pk = kwargs.get('pk')
+        pk = kwargs.get("pk")
         try:
             payload = self._clean_payload(dict(request.data))
-            res = supabase.table(self.table_name).update(payload).eq('id', pk).execute()
+            res = supabase.table(self.table_name).update(payload).eq("id", pk).execute()
             if not res.data:
                 return Response({"error": "Não encontrado."}, status=404)
             return Response(res.data[0])
@@ -109,9 +110,9 @@ class SupabaseViewSet(viewsets.ViewSet):
     def destroy(self, request, *args, **kwargs):
         if not supabase:
             return Response({"error": "Supabase não configurado."}, status=500)
-        pk = kwargs.get('pk')
+        pk = kwargs.get("pk")
         try:
-            supabase.table(self.table_name).delete().eq('id', pk).execute()
+            supabase.table(self.table_name).delete().eq("id", pk).execute()
             return Response(status=status.HTTP_204_NO_CONTENT)
         except Exception as e:
             return Response({"error": str(e)}, status=500)

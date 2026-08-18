@@ -1,4 +1,5 @@
 import uuid
+
 from django.db import models
 
 
@@ -9,7 +10,7 @@ class Client(models.Model):
     phone = models.TextField(null=True, blank=True)
     email = models.TextField(null=True, blank=True)
     trade_name = models.TextField(null=True, blank=True)
-    person_type = models.TextField(default='FISICA', null=True, blank=True)
+    person_type = models.TextField(default="FISICA", null=True, blank=True)
     active = models.BooleanField(default=True, null=True, blank=True)
     payment_deadline_days = models.IntegerField(default=0, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
@@ -17,7 +18,7 @@ class Client(models.Model):
 
     class Meta:
         managed = False
-        db_table = 'clients'
+        db_table = "clients"
 
 
 class Employee(models.Model):
@@ -26,13 +27,13 @@ class Employee(models.Model):
     document = models.TextField(null=True, blank=True)
     phone = models.TextField(null=True, blank=True)
     email = models.TextField(null=True, blank=True)
-    role = models.TextField(default='SECRETARIO')
+    role = models.TextField(default="SECRETARIO")
     active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
 
     class Meta:
         managed = False
-        db_table = 'employees'
+        db_table = "employees"
 
 
 class DeliveryDriver(models.Model):
@@ -46,4 +47,4 @@ class DeliveryDriver(models.Model):
 
     class Meta:
         managed = False
-        db_table = 'delivery_drivers'
+        db_table = "delivery_drivers"

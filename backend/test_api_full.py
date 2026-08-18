@@ -3,13 +3,13 @@ Script de teste completo da API - Império do Gás ERP
 Testa todos os endpoints: auth, clients, drivers, employees, products, inbounds, orders.
 """
 
+import io
 import json
-import urllib.request
+import sys
 import urllib.error
 import urllib.parse
+import urllib.request
 import uuid
-import sys
-import io
 
 # Força UTF-8 no stdout do Windows
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
@@ -90,7 +90,7 @@ if client_id:
     client_id = created_client["id"]
 
     s, p = req("GET", f"/api/clients/{client_id}/")
-    check(f"GET /api/clients/{{id}}/ (detalhe)", s, p, 200, lambda d: d.get("id") == client_id)
+    check("GET /api/clients/{id}/ (detalhe)", s, p, 200, lambda d: d.get("id") == client_id)
 
     s, p = req("PUT", f"/api/clients/{client_id}/", {**client_payload, "name": f"Cliente Atualizado {uid}"})
     check("PUT /api/clients/{id}/ (atualizar)", s, p, 200, lambda d: "atualizado" in d.get("name", "").lower() or d.get("id") == client_id)
@@ -264,7 +264,7 @@ print(f"  RESULTADO: {passed}/{total} testes passaram  |  {failed} falhou(aram)"
 print("="*60 + "\n")
 
 if failed > 0:
-    print(f"Testes que falharam:")
+    print("Testes que falharam:")
     for label, ok in results:
         if not ok:
             print(f"  FAIL: {label}")

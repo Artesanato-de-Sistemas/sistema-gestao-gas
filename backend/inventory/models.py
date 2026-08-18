@@ -1,5 +1,7 @@
 import uuid
+
 from django.db import models
+
 
 class Product(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -13,11 +15,12 @@ class Product(models.Model):
 
     class Meta:
         managed = False
-        db_table = 'products'
+        db_table = "products"
+
 
 class StockMovement(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, db_column='product_id', null=True, blank=True)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, db_column="product_id", null=True, blank=True)
     movement_type = models.TextField()
     quantity = models.IntegerField()
     notes = models.TextField(null=True, blank=True)
@@ -25,4 +28,4 @@ class StockMovement(models.Model):
 
     class Meta:
         managed = False
-        db_table = 'stock_movements'
+        db_table = "stock_movements"

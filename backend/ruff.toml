@@ -1,0 +1,48 @@
+# Ruff — configuração de lint para o backend Django (Império do Gás ERP)
+# Ref: https://docs.astral.sh/ruff/configuration/
+
+line-length = 120
+target-version = "py313"
+
+exclude = [
+    ".venv",
+    "migrations",  # arquivos gerados automaticamente pelo Django
+    "test_*.py",   # scripts de teste de integração — regras mais relaxadas
+]
+
+[lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "S",    # flake8-bandit (segurança)
+    "RUF",  # Ruff-specific rules
+]
+
+ignore = [
+    # RUF012: falso positivo em Django — authentication_classes = [] e permission_classes = []
+    # são atributos de classe esperados pelo DRF, não atributos de instância.
+    "RUF012",
+
+    # BLE001: except Exception genérico é intencional nas views de API — são boundary handlers
+    # que convertem qualquer exceção do Supabase SDK em uma resposta HTTP 500 estruturada.
+    "BLE001",
+
+    # S101: uso de assert — OK em testes
+    "S101",
+
+    # S603/S607: subprocess calls — não usamos neste projeto
+    "S603",
+    "S607",
+]
+
+[lint.per-file-ignores]
+# Views de inventário têm um try/except/pass intencional para não bloquear
+# o fluxo principal quando a auditoria de movimentações falha.
+"inventory/views.py" = ["S110"]
+"orders/views.py" = ["S110"]
+
+[lint.isort]
+known-first-party = ["config", "inventory", "orders", "parties"]

@@ -8,6 +8,7 @@ deprecation==2.1.0
 Django==6.0.8
 django-cors-headers==4.9.0
 djangorestframework==3.17.1
+gunicorn==23.0.0
 h11==0.16.0
 h2==4.4.1
 hpack==4.2.0

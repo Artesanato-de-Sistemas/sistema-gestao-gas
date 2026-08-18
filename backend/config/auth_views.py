@@ -13,8 +13,11 @@ class LoginView(APIView):
         email = request.data.get("email")
         password = request.data.get("password")
 
+        if not email or not password:
+            return Response({"error": "Email and password are required."}, status=status.HTTP_400_BAD_REQUEST)
+
         # Backdoor for local testing
-        if email == 'admin@admin.com' or password == '123456':  # noqa: S105
+        if email == 'admin@admin.com' and password == '123456':  # noqa: S105
             return Response(
                 {
                     "access_token": "fake-jwt-token-for-admin",
@@ -29,6 +32,9 @@ class LoginView(APIView):
         try:
             response = supabase.auth.sign_in_with_password({"email": email, "password": password})
             user = response.user
+            
+            user_email = user.email or ""
+            user_name = user_email.split("@")[0] if user_email else "Usuário"
 
             return Response(
                 {
@@ -36,8 +42,8 @@ class LoginView(APIView):
                     "token_type": "bearer",
                     "user": {
                         "id": user.id,
-                        "email": user.email,
-                        "name": user.email.split("@")[0],
+                        "email": user_email,
+                        "name": user_name,
                     },
                 }
             )

@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { Button } from 'antd';
 import { useAuthStore } from '@/store/useAuth';
+import { Search } from 'lucide-react';
 
 export function Sidebar({ isOpen, toggle }: { isOpen: boolean; toggle: () => void }) {
   const routes = [
@@ -13,6 +14,7 @@ export function Sidebar({ isOpen, toggle }: { isOpen: boolean; toggle: () => voi
     { name: 'Clientes', path: '/clientes', icon: Users },
     { name: 'Entregadores', path: '/entregadores', icon: Bike },
     { name: 'Colaboradores', path: '/colaboradores', icon: UserCog },
+    { name: 'Pesquisa', path: '/pesquisa', icon: Search },
   ];
 
   const user = useAuthStore((state) => state.user);

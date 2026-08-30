@@ -10,6 +10,7 @@ import { Sales } from '@/pages/Sales';
 import { Stock } from '@/pages/Stock';
 import { Employees } from '@/pages/Employees';
 import { useAuthStore } from '@/store/useAuth';
+import { Pesquisa } from '@/pages/Pesquisa';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -44,6 +45,7 @@ export function AppRoutes() {
         <Route path="entregadores" element={<DriversDashboard />} />
         <Route path="vendas" element={<Sales />} />
         <Route path="clientes" element={<Customers />} />
+        <Route path="pesquisa" element={<Pesquisa />} />
       </Route>
       
       <Route path="*" element={<Navigate to="/" replace />} />

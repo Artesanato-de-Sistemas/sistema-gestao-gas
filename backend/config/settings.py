@@ -118,9 +118,11 @@ if DEBUG:
     ]
 else:
     CORS_ALLOW_ALL_ORIGINS = False
-    CORS_ALLOWED_ORIGINS = [
-        # Adicione os domínios de produção aqui
-    ]
+# CORS Config (Permite requisições do frontend local e da Vercel)
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "https://sistema-gestao-gas.vercel.app"
+]
 
 # Django REST Framework
 REST_FRAMEWORK = {

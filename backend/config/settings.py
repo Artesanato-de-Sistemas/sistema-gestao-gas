@@ -107,13 +107,15 @@ USE_TZ = True
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# === BLINDAGEM DE SEGURANÇA E CORS (MVP) ===
-
-# Desativa a restrição de origem e libera o fluxo entre Vercel e Render
-CORS_ALLOW_ALL_ORIGINS = True
+# CORS DEFINITIONS
+CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_CREDENTIALS = True
 
-# Libera explicitamente os cabeçalhos usados pelo frontend
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "https://sistema-gestao-gas.vercel.app"
+]
+
 CORS_ALLOW_HEADERS = [
     "accept",
     "accept-encoding",

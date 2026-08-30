@@ -108,12 +108,26 @@ STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # CORS DEFINITIONS
-CORS_ALLOW_ALL_ORIGINS = False
+# Permite sobrescrever via env var para facilitar Preview Deployments do Vercel
+_cors_all = os.environ.get("CORS_ALLOW_ALL_ORIGINS", "false").lower() == "true"
+CORS_ALLOW_ALL_ORIGINS = _cors_all
 CORS_ALLOW_CREDENTIALS = True
 
-CORS_ALLOWED_ORIGINS = [
+_base_origins = [
     "http://localhost:5173",
-    "https://sistema-gestao-gas.vercel.app"
+    "http://localhost:3000",
+    "https://sistema-gestao-gas.vercel.app",
+]
+# Origens extras separadas por vírgula (ex: preview deployments do Vercel)
+_extra = os.environ.get("CORS_EXTRA_ORIGINS", "")
+if _extra:
+    _base_origins += [o.strip() for o in _extra.split(",") if o.strip()]
+
+CORS_ALLOWED_ORIGINS = _base_origins
+
+# Padrão para preview deployments do Vercel (*.vercel.app)
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://sistema-gestao-gas-.*\.vercel\.app$",
 ]
 
 CORS_ALLOW_HEADERS = [

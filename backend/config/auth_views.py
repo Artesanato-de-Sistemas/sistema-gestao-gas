@@ -54,5 +54,6 @@ class LoginView(APIView):
                     },
                 }
             )
-        except Exception:
+        except Exception as e:
+            print(f"Login error: {e}", flush=True)
             return Response({"detail": "Email ou senha inválidos."}, status=status.HTTP_401_UNAUTHORIZED)

@@ -20,11 +20,15 @@ export function Login() {
     
     setLoading(true);
     try {
-      // Need to import { api } from '@/services/api';
       const res = await api.post('/auth/login', { email, password });
-      
+      const apiUser = res.data.user || {};
       login(
-        res.data.user || { id: '1', name: 'Admin', email: email },
+        {
+          id: apiUser.id || '1',
+          name: apiUser.name || email.split('@')[0],
+          email: apiUser.email || email,
+          role: apiUser.role || 'COLABORADOR',
+        },
         res.data.access_token
       );
       navigate('/');

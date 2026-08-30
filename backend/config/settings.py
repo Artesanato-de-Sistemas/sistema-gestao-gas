@@ -33,7 +33,8 @@ INSTALLED_APPS = [
     "inventory",
     "orders",
     "parties",
-    'analytics',
+    "analytics",
+    "users",
 ]
 
 MIDDLEWARE = [
@@ -123,6 +124,8 @@ else:
 
 # Django REST Framework
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": [],
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "config.permissions.SupabaseJWTAuthentication",
+    ],
     "DEFAULT_PERMISSION_CLASSES": [],
 }

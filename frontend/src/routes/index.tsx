@@ -11,14 +11,20 @@ import { Stock } from '@/pages/Stock';
 import { Employees } from '@/pages/Employees';
 import { useAuthStore } from '@/store/useAuth';
 import { Pesquisa } from '@/pages/Pesquisa';
+import { SystemSettings } from '@/pages/SystemSettings';
+import { MyProfile } from '@/pages/MyProfile';
 
+/** Redireciona para /login se não autenticado. */
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-  
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
+/** Redireciona para / se não for ADMIN. */
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const isAdmin = useAuthStore((state) => state.isAdmin);
+  if (!isAdmin) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
@@ -26,7 +32,7 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      
+
       <Route
         path="/"
         element={
@@ -38,16 +44,27 @@ export function AppRoutes() {
         <Route index element={<Navigate to="/inbounds" replace />} />
         <Route path="inbounds" element={<Inbounds />} />
         <Route path="dashboard" element={<Dashboard />} />
-        
-        {/* Mocking other routes for now */}
         <Route path="estoque" element={<Stock />} />
         <Route path="colaboradores" element={<Employees />} />
         <Route path="entregadores" element={<DriversDashboard />} />
         <Route path="vendas" element={<Sales />} />
         <Route path="clientes" element={<Customers />} />
         <Route path="pesquisa" element={<Pesquisa />} />
+
+        {/* Rotas de perfil — visível a todos autenticados */}
+        <Route path="meus-dados" element={<MyProfile />} />
+
+        {/* Rotas de administração — exclusivas para ADMIN */}
+        <Route
+          path="definicoes"
+          element={
+            <AdminRoute>
+              <SystemSettings />
+            </AdminRoute>
+          }
+        />
       </Route>
-      
+
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

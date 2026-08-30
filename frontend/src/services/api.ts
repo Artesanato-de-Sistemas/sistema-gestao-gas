@@ -33,11 +33,13 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    if (error.response?.status === 401 || error.response?.status === 403) {
+    if (error.response?.status === 401) {
+      // Session expired or not authenticated — force re-login
       localStorage.removeItem('token');
       localStorage.removeItem('auth_user');
       window.location.href = '/login';
     }
+    // 403 Forbidden: propagate so the page can show an inline error
     return Promise.reject(error);
   }
 );

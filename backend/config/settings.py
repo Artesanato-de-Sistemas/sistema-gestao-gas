@@ -107,21 +107,23 @@ USE_TZ = True
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# CORS Config
-# Em desenvolvimento (DEBUG=True): libera qualquer origem localhost/127.0.0.1.
-# Em produção: use CORS_ALLOWED_ORIGINS com os domínios reais.
-if DEBUG:
-    CORS_ALLOW_ALL_ORIGINS = False
-    CORS_ALLOWED_ORIGIN_REGEXES = [
-        r"^http://localhost(:\d+)?$",
-        r"^http://127\.0\.0\.1(:\d+)?$",
-    ]
-else:
-    CORS_ALLOW_ALL_ORIGINS = False
-# CORS Config (Permite requisições do frontend local e da Vercel)
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "https://sistema-gestao-gas.vercel.app"
+# === BLINDAGEM DE SEGURANÇA E CORS (MVP) ===
+
+# Desativa a restrição de origem e libera o fluxo entre Vercel e Render
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
+
+# Libera explicitamente os cabeçalhos usados pelo frontend
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
 ]
 
 # Django REST Framework

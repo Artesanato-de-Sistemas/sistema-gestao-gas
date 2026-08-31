@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Card, Select, DatePicker, Button, Table, message, Spin } from 'antd';
-import { Search } from 'lucide-react';
+import { Search, BarChart2 } from 'lucide-react';
 import { api } from '@/services/api';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 import type { ColumnsType } from 'antd/es/table';
@@ -215,13 +215,18 @@ export function Pesquisa() {
   const driverOptions = drivers.map(d => ({ value: d.id, label: d.name }));
 
   return (
-    <div className="space-y-8 p-6">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight text-slate-800">🔍 Pesquisa Avançada</h2>
-        <p className="text-slate-500">Teste novas visões de dados antes de fixá-las no Dashboard.</p>
+    <div className="space-y-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight text-slate-800 flex items-center gap-2 m-0">
+            <BarChart2 className="w-6 h-6 text-orange-500" />
+            Pesquisa Avançada
+          </h2>
+          <p className="text-slate-500 mt-1 mb-0">Teste novas visões de dados antes de fixá-las no Dashboard.</p>
+        </div>
       </div>
 
-      <Card className="shadow-sm rounded-2xl border-slate-100">
+      <Card className="border-slate-100 shadow-sm rounded-2xl p-2" styles={{ body: { padding: '16px' } }}>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-1">
             <label className="text-slate-600 font-medium">Análise</label>
@@ -267,7 +272,7 @@ export function Pesquisa() {
         </div>
       </Card>
 
-      <Card className="shadow-sm rounded-2xl border-slate-100 overflow-x-auto">
+      <Card className="border-slate-100 shadow-sm rounded-2xl overflow-x-auto" styles={{ body: { padding: 0 } }}>
         <Spin spinning={loading}>
           {tableData.length > 0 ? (
             <Table

@@ -1,18 +1,47 @@
 import { useState, useEffect } from "react";
-import { Button, Card, Input, Select, Table, Tag, Modal, Space, Typography, message } from "antd";
+import { Button, Card, Input, Select, Table, Tag, Modal, Space, Typography, message, DatePicker, InputNumber } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { Order, OrderItem, Client, Product, DeliveryDriver } from "@/types";
 import { formatCurrency, formatDate } from "@/utils/formatters";
-import { FileText, Search, Plus, Eye, Trash2 } from "lucide-react";
+import { FileText, Search, Plus, Eye, Trash2, DollarSign } from "lucide-react";
 import { api } from "@/services/api";
+import dayjs from "dayjs";
 
 const { Text, Title } = Typography;
+
+// Tipos atualizados
+interface Order {
+  id: string;
+  client_id: string;
+  client_name?: string;
+  delivery_driver_id?: string;
+  driver_name?: string;
+  date: string;
+  unit_cost: number;
+  quantity: number;
+  payment_form: string;
+  payment_received: number;
+  total_amount: number;
+  product: string;
+  created_at: string;
+  updated_at: string;
+  status?: string;
+}
+
+interface Client {
+  id: string;
+  name: string;
+  trade_name?: string;
+}
+
+interface DeliveryDriver {
+  id: string;
+  name: string;
+}
 
 export function Sales() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [drivers, setDrivers] = useState<DeliveryDriver[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
   
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -20,16 +49,14 @@ export function Sales() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [ordersRes, clientsRes, driversRes, productsRes] = await Promise.all([
+      const [ordersRes, clientsRes, driversRes] = await Promise.all([
         api.get('/orders'),
         api.get('/clients'),
-        api.get('/drivers'),
-        api.get('/products')
+        api.get('/drivers')
       ]);
       setOrders(ordersRes.data);
       setClients(clientsRes.data);
       setDrivers(driversRes.data);
-      setProducts(productsRes.data);
     } catch (error) {
       console.error(error);
       message.error("Erro ao carregar dados de vendas");
@@ -45,69 +72,69 @@ export function Sales() {
   // Create Modal
   const [isNewOrderOpen, setIsNewOrderOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState("");
-  const [selectedDriver, setSelectedDriver] = useState("none");
-  const [saleType, setSaleType] = useState("AVISTA");
-  const [orderItems, setOrderItems] = useState<
-    { product_id: string; quantity: number; unit_price: number }[]
-  >([]);
+  const [selectedDriver, setSelectedDriver] = useState("");
+  const [selectedProduct, setSelectedProduct] = useState("P13 - Gas");
+  const [unitCost, setUnitCost] = useState<number>(94.50);
+  const [quantity, setQuantity] = useState<number>(1);
+  const [paymentForm, setPaymentForm] = useState("DINHEIRO");
+  const [saleDate, setSaleDate] = useState(dayjs());
 
   // View Modal
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
 
-  // Add Item to Order State
-  const [selectedProd, setSelectedProd] = useState("");
-  const [qty, setQty] = useState("1");
+  // Opções de produtos (fixas por enquanto, podem vir do backend depois)
+  const productOptions = [
+    { value: "P13 - Gas", label: "P13 - Gás", defaultPrice: 94.50 },
+    { value: "P20 - Gas", label: "P20 - Gás", defaultPrice: 145.00 },
+    { value: "P45 - Gas", label: "P45 - Gás", defaultPrice: 375.00 },
+  ];
 
-  const handleAddItem = () => {
-    if (!selectedProd || !qty) return;
-    const prod = products.find((p) => p.id === selectedProd);
-    if (!prod) return;
-
-    const existing = orderItems.find((i) => i.product_id === selectedProd);
-    if (existing) {
-      setOrderItems(
-        orderItems.map((i) =>
-          i.product_id === selectedProd
-            ? { ...i, quantity: i.quantity + Number(qty) }
-            : i,
-        ),
-      );
-    } else {
-      setOrderItems([
-        ...orderItems,
-        {
-          product_id: selectedProd,
-          quantity: Number(qty),
-          unit_price: prod.current_price,
-        },
-      ]);
-    }
-    setQty("1");
-    setSelectedProd("");
-  };
-
-  const handleRemoveItem = (idx: number) => {
-    setOrderItems(orderItems.filter((_, i) => i !== idx));
-  };
+  // Opções de pagamento
+  const paymentOptions = [
+    { value: "DINHEIRO", label: "Dinheiro" },
+    { value: "PIX", label: "PIX" },
+    { value: "CREDITO", label: "Cartão de Crédito" },
+    { value: "DEBITO", label: "Cartão de Débito" },
+    { value: "A PRAZO (VENDA)", label: "A Prazo (Fiado)" },
+  ];
 
   const handleCreateOrder = async () => {
-    if (!selectedClient || orderItems.length === 0) return;
+    if (!selectedClient) {
+      message.warning("Selecione um cliente");
+      return;
+    }
+
+    if (!quantity || quantity <= 0) {
+      message.warning("Quantidade deve ser maior que 0");
+      return;
+    }
+
+    const totalAmount = unitCost * quantity;
+    const paymentReceived = paymentForm === "A PRAZO (VENDA)" ? 0 : totalAmount;
 
     const payload = {
       client_id: selectedClient,
-      delivery_driver_id: selectedDriver === "none" ? undefined : selectedDriver,
-      sale_type: saleType,
-      items: orderItems
+      delivery_driver_id: selectedDriver || null,
+      date: saleDate.format('YYYY-MM-DD'),
+      product: selectedProduct,
+      unit_cost: unitCost,
+      quantity: quantity,
+      payment_form: paymentForm,
+      payment_received: paymentReceived,
+      total_amount: totalAmount,
     };
 
     try {
       await api.post('/orders', payload);
       message.success('Venda concluída com sucesso!');
       setIsNewOrderOpen(false);
-      setOrderItems([]);
       setSelectedClient("");
-      setSelectedDriver("none");
-      setSaleType("AVISTA");
+      setSelectedDriver("");
+      setSelectedProduct("P13 - Gas");
+      setUnitCost(94.50);
+      setQuantity(1);
+      setPaymentForm("DINHEIRO");
+      setSaleDate(dayjs());
       fetchData();
     } catch (error) {
       console.error(error);
@@ -120,6 +147,7 @@ export function Sales() {
     return (
       (o.client_name?.toLowerCase() || "").includes(searchLower) ||
       (o.driver_name?.toLowerCase() || "").includes(searchLower) ||
+      o.product?.toLowerCase().includes(searchLower) ||
       o.id.toLowerCase().includes(searchLower)
     );
   });
@@ -134,7 +162,7 @@ export function Sales() {
             #{record.id.slice(0, 6).toUpperCase()}
           </p>
           <p className="text-xs text-slate-500 m-0">
-            {formatDate(record.created_at)}
+            {formatDate(record.date || record.created_at)}
           </p>
         </div>
       ),
@@ -143,7 +171,67 @@ export function Sales() {
       title: "Cliente",
       dataIndex: "client_name",
       key: "client_name",
-      render: (client_name) => <span className="font-medium text-slate-700">{client_name || "-"}</span>,
+      render: (client_name) => (
+        <span className="font-medium text-slate-700">{client_name || "-"}</span>
+      ),
+    },
+    {
+      title: "Produto",
+      dataIndex: "product",
+      key: "product",
+      render: (product) => (
+        <span className="text-slate-700">{product || "-"}</span>
+      ),
+    },
+    {
+      title: "Qtd",
+      dataIndex: "quantity",
+      key: "quantity",
+      align: 'center',
+      render: (quantity) => (
+        <span className="font-medium text-slate-700">{quantity}</span>
+      ),
+    },
+    {
+      title: "Valor Unit.",
+      dataIndex: "unit_cost",
+      key: "unit_cost",
+      align: 'right',
+      render: (unit_cost) => (
+        <span className="text-slate-600">{formatCurrency(unit_cost)}</span>
+      ),
+    },
+    {
+      title: "Total",
+      dataIndex: "total_amount",
+      key: "total_amount",
+      align: 'right',
+      render: (total_amount) => (
+        <p className="font-bold text-slate-800 m-0">
+          {formatCurrency(total_amount)}
+        </p>
+      ),
+    },
+    {
+      title: "Pagamento",
+      key: "payment",
+      render: (_, record) => (
+        <div>
+          <Tag color={record.payment_form === "A PRAZO (VENDA)" ? "orange" : "green"}>
+            {record.payment_form}
+          </Tag>
+          {record.payment_form === "A PRAZO (VENDA)" && record.payment_received === 0 && (
+            <div className="text-xs text-orange-600">
+              Aguardando pagamento
+            </div>
+          )}
+          {record.payment_received > 0 && record.payment_received < record.total_amount && (
+            <div className="text-xs text-blue-600">
+              Recebido: {formatCurrency(record.payment_received)}
+            </div>
+          )}
+        </div>
+      ),
     },
     {
       title: "Entregador",
@@ -152,32 +240,8 @@ export function Sales() {
       render: (driver_name) => driver_name ? (
         <span className="text-slate-600">{driver_name}</span>
       ) : (
-        <span className="text-slate-400 italic">Retirada</span>
+        <span className="text-slate-400 italic">Não definido</span>
       ),
-    },
-    {
-      title: "Valor",
-      key: "valor",
-      align: 'right',
-      render: (_, record) => (
-        <div>
-          <p className="font-bold text-slate-800 m-0">
-            {formatCurrency(record.total_amount)}
-          </p>
-          <p className="text-xs text-slate-500 m-0">{record.sale_type}</p>
-        </div>
-      ),
-    },
-    {
-      title: "Status",
-      key: "status",
-      align: 'center',
-      render: (_, record) => {
-        if (record.status === "ENTREGUE") return <Tag color="success">Finalizado</Tag>;
-        if (record.status === "ABERTO") return <Tag color="warning">Aberto (Fiado)</Tag>;
-        if (record.status === "CANCELADO") return <Tag color="error">Cancelado</Tag>;
-        return <Tag>{record.status}</Tag>;
-      },
     },
     {
       title: "Ações",
@@ -193,6 +257,11 @@ export function Sales() {
     },
   ];
 
+  // Calcular total do pedido
+  const calculateTotal = () => {
+    return unitCost * quantity;
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -202,7 +271,7 @@ export function Sales() {
             Vendas e Pedidos
           </h2>
           <p className="text-slate-500 mt-1 mb-0">
-            Gerencie ordens de serviço, vendas rápidas e entregas.
+            Gerencie vendas, pedidos e formas de pagamento.
           </p>
         </div>
 
@@ -221,7 +290,7 @@ export function Sales() {
           <label className="text-slate-600 block">Buscar Vendas</label>
           <Input
             prefix={<Search className="h-4 w-4 text-slate-400" />}
-            placeholder="Cliente, ID ou Entregador"
+            placeholder="Cliente, Produto, ID ou Entregador"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="rounded-lg h-10 border-slate-200"
@@ -237,12 +306,13 @@ export function Sales() {
           pagination={false}
           loading={loading}
           className="w-full"
+          scroll={{ x: true }}
         />
       </Card>
 
       {/* New Order Modal */}
       <Modal
-        title="Nova Venda / Pedido"
+        title="Nova Venda"
         open={isNewOrderOpen}
         onCancel={() => setIsNewOrderOpen(false)}
         footer={[
@@ -252,18 +322,19 @@ export function Sales() {
           <Button
             key="submit"
             type="primary"
-            disabled={!selectedClient || orderItems.length === 0}
+            disabled={!selectedClient || !quantity || quantity <= 0}
             onClick={handleCreateOrder}
             className="rounded-full h-10 px-6 font-medium"
           >
             Concluir Venda
           </Button>,
         ]}
-        width={650}
+        width={700}
         centered
         className="custom-modal"
       >
         <div className="mt-6 mb-4 px-2 space-y-6">
+          {/* Cliente e Entregador */}
           <div className="grid grid-cols-2 gap-6">
             <div className="space-y-1.5 flex flex-col">
               <label className="text-slate-800 font-medium text-base">
@@ -274,12 +345,13 @@ export function Sales() {
                 onChange={setSelectedClient}
                 placeholder="Selecione o cliente"
                 className="w-full h-10"
+                showSearch
+                optionFilterProp="label"
                 options={clients.map((c) => ({
                   value: c.id,
                   label: c.trade_name || c.name,
                 }))}
               />
-              <span className="text-xs text-slate-500">Campo obrigatório</span>
             </div>
             <div className="space-y-1.5 flex flex-col">
               <label className="text-slate-800 font-medium text-base">
@@ -288,119 +360,120 @@ export function Sales() {
               <Select
                 value={selectedDriver}
                 onChange={setSelectedDriver}
+                placeholder="Selecione o entregador"
                 className="w-full h-10"
-                options={[
-                  { value: "none", label: "Balcão (Sem entregador)" },
-                  ...drivers.map((d) => ({
-                    value: d.id,
-                    label: d.name,
-                  })),
-                ]}
+                allowClear
+                options={drivers.map((d) => ({
+                  value: d.id,
+                  label: d.name,
+                }))}
               />
             </div>
           </div>
 
-          <div className="w-1/2 pr-3">
+          {/* Data e Produto */}
+          <div className="grid grid-cols-2 gap-6">
             <div className="space-y-1.5 flex flex-col">
               <label className="text-slate-800 font-medium text-base">
-                Tipo de Venda
+                Data da Venda
+              </label>
+              <DatePicker
+                value={saleDate}
+                onChange={(date) => setSaleDate(date || dayjs())}
+                className="w-full h-10"
+                format="DD/MM/YYYY"
+              />
+            </div>
+            <div className="space-y-1.5 flex flex-col">
+              <label className="text-slate-800 font-medium text-base">
+                Produto <span className="text-red-500">*</span>
               </label>
               <Select
-                value={saleType}
-                onChange={setSaleType}
+                value={selectedProduct}
+                onChange={(value) => {
+                  setSelectedProduct(value);
+                  const product = productOptions.find(p => p.value === value);
+                  if (product) {
+                    setUnitCost(product.defaultPrice);
+                  }
+                }}
                 className="w-full h-10"
-                options={[
-                  { value: "AVISTA", label: "A Vista" },
-                  { value: "FIADO", label: "À Prazo / Fiado" },
-                  { value: "CARTAO", label: "Cartão / Pix" },
-                ]}
+                options={productOptions}
               />
             </div>
           </div>
 
-          <div className="space-y-4 pt-2">
-            <div className="flex items-end gap-3">
-              <div className="flex-1 space-y-1.5 flex flex-col">
-                <label className="text-slate-800 font-medium text-base">
-                  Itens do Pedido
-                </label>
-                <Select
-                  value={selectedProd}
-                  onChange={setSelectedProd}
-                  placeholder="Pesquisar produto"
-                  className="w-full h-10"
-                  options={products.map((p) => ({
-                    value: p.id,
-                    label: `${p.name} - ${formatCurrency(p.current_price)}`,
-                  }))}
-                />
-              </div>
-              <div className="w-20 space-y-1.5 flex flex-col">
-                <label className="text-slate-800 font-medium text-base text-center">
-                  Qtd
-                </label>
-                <Input
-                  type="number"
-                  min="1"
-                  value={qty}
-                  onChange={(e) => setQty(e.target.value)}
-                  className="h-10 text-center"
-                />
-              </div>
-              <Button
-                type="primary"
-                onClick={handleAddItem}
-                disabled={!selectedProd}
-                className="h-10 px-6 rounded-full font-medium bg-[#595563] hover:bg-[#4a4753] border-none flex items-center"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Adicionar Item
-              </Button>
+          {/* Quantidade e Preço Unitário */}
+          <div className="grid grid-cols-2 gap-6">
+            <div className="space-y-1.5 flex flex-col">
+              <label className="text-slate-800 font-medium text-base">
+                Quantidade <span className="text-red-500">*</span>
+              </label>
+              <InputNumber
+                min={1}
+                value={quantity}
+                onChange={(value) => setQuantity(value || 1)}
+                className="w-full h-10"
+                formatter={value => `${value}`}
+                parser={value => Number(value) || 1}
+              />
             </div>
+            <div className="space-y-1.5 flex flex-col">
+              <label className="text-slate-800 font-medium text-base">
+                Preço Unitário (R$)
+              </label>
+              <InputNumber
+                min={0}
+                value={unitCost}
+                onChange={(value) => setUnitCost(value || 0)}
+                className="w-full h-10"
+                formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}
+                parser={value => Number(value?.replace(/[^\d]/g, '')) / 100 || 0}
+                precision={2}
+              />
+            </div>
+          </div>
 
-            {orderItems.length > 0 && (
-              <div className="mt-6 space-y-3">
-                {orderItems.map((item, idx) => {
-                  const p = products.find((x) => x.id === item.product_id);
-                  return (
-                    <div
-                      key={idx}
-                      className="flex justify-between items-center py-3 border-b border-slate-200"
-                    >
-                      <span className="text-slate-800 font-medium">
-                        {item.quantity}x {p?.name}
-                      </span>
-                      <div className="flex items-center gap-4">
-                        <span className="text-slate-800 font-medium">
-                          - {formatCurrency(item.quantity * item.unit_price)}
-                        </span>
-                        <Button
-                          type="text"
-                          danger
-                          icon={<Trash2 className="h-4 w-4" />}
-                          onClick={() => handleRemoveItem(idx)}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
+          {/* Forma de Pagamento */}
+          <div className="space-y-1.5 flex flex-col">
+            <label className="text-slate-800 font-medium text-base">
+              Forma de Pagamento <span className="text-red-500">*</span>
+            </label>
+            <Select
+              value={paymentForm}
+              onChange={setPaymentForm}
+              className="w-full h-10"
+              options={paymentOptions}
+            />
+            {paymentForm === "A PRAZO (VENDA)" && (
+              <div className="mt-2 p-3 bg-orange-50 rounded-lg border border-orange-200">
+                <p className="text-sm text-orange-700 m-0">
+                  ⚠️ Venda a prazo: o pagamento será registrado posteriormente.
+                  Valor a receber: {formatCurrency(calculateTotal())}
+                </p>
               </div>
             )}
+          </div>
 
-            <div className="flex justify-end pt-6 mt-4 border-t border-slate-200">
-              <div className="text-right">
-                <span className="text-base text-slate-800">
-                  Total do Pedido:{" "}
-                </span>
-                <span className="text-2xl font-bold text-slate-900 ml-2">
-                  {formatCurrency(
-                    orderItems.reduce(
-                      (acc, item) => acc + item.quantity * item.unit_price,
-                      0,
-                    ),
-                  )}
-                </span>
-              </div>
+          {/* Resumo do Pedido */}
+          <div className="flex justify-end pt-6 mt-4 border-t border-slate-200">
+            <div className="text-right">
+              <span className="text-base text-slate-800">
+                Total do Pedido:{" "}
+              </span>
+              <span className="text-2xl font-bold text-slate-900 ml-2">
+                {formatCurrency(calculateTotal())}
+              </span>
+              {paymentForm === "A PRAZO (VENDA)" && (
+                <div className="text-sm text-orange-600 mt-1">
+                  Pagamento pendente
+                </div>
+              )}
+              {paymentForm !== "A PRAZO (VENDA)" && (
+                <div className="text-sm text-green-600 mt-1">
+                  Pagamento integral: {formatCurrency(calculateTotal())}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -425,57 +498,69 @@ export function Sales() {
               <div>
                 <p className="text-sm text-slate-500 m-0">Cliente</p>
                 <p className="font-semibold text-slate-800 m-0">
-                  {viewingOrder.client_name}
+                  {viewingOrder.client_name || "Não definido"}
                 </p>
               </div>
               <div className="text-right">
                 <p className="text-sm text-slate-500 m-0">Data</p>
                 <p className="font-medium text-slate-800 m-0">
-                  {formatDate(viewingOrder.created_at || new Date().toISOString())}
+                  {formatDate(viewingOrder.date || viewingOrder.created_at)}
                 </p>
               </div>
             </div>
 
             <div className="flex justify-between items-start">
               <div>
-                <p className="text-sm text-slate-500 m-0">Modo</p>
+                <p className="text-sm text-slate-500 m-0">Produto</p>
                 <p className="font-medium text-slate-700 m-0">
-                  {viewingOrder.sale_type}
+                  {viewingOrder.product}
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-sm text-slate-500 m-0">Entregador</p>
+                <p className="text-sm text-slate-500 m-0">Quantidade</p>
                 <p className="font-medium text-slate-700 m-0">
-                  {viewingOrder.driver_name || "Retirada"}
+                  {viewingOrder.quantity}
                 </p>
               </div>
             </div>
 
             <div>
-              <p className="text-sm text-slate-500 mb-2">Itens</p>
-              <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                {viewingOrder.items?.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="flex justify-between items-center py-2 border-b border-slate-200 last:border-0"
-                  >
-                    <span className="text-sm text-slate-700">
-                      {item.quantity}x {item.product_name}
-                    </span>
-                    <span className="text-sm font-medium text-slate-800">
-                      {formatCurrency(item.subtotal)}
-                    </span>
-                  </div>
-                ))}
+              <p className="text-sm text-slate-500 m-0">Pagamento</p>
+              <div className="mt-1">
+                <Tag color={viewingOrder.payment_form === "A PRAZO (VENDA)" ? "orange" : "green"}>
+                  {viewingOrder.payment_form}
+                </Tag>
+                {viewingOrder.payment_form === "A PRAZO (VENDA)" && (
+                  <p className="text-sm text-orange-600 mt-1 m-0">
+                    Aguardando pagamento de {formatCurrency(viewingOrder.total_amount)}
+                  </p>
+                )}
               </div>
             </div>
 
-            <div className="flex justify-between items-center pt-4 border-t border-slate-100 mt-2">
-              <p className="text-slate-600 font-medium m-0">Total Geral</p>
-              <p className="text-xl font-bold text-orange-600 m-0">
-                {formatCurrency(viewingOrder.total_amount)}
-              </p>
+            <div className="flex justify-between items-center pt-4 border-t border-slate-100">
+              <div>
+                <p className="text-sm text-slate-500 m-0">Valor Unitário</p>
+                <p className="font-medium text-slate-700">
+                  {formatCurrency(viewingOrder.unit_cost)}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm text-slate-500 m-0">Total Geral</p>
+                <p className="text-xl font-bold text-orange-600 m-0">
+                  {formatCurrency(viewingOrder.total_amount)}
+                </p>
+              </div>
             </div>
+
+            {viewingOrder.driver_name && (
+              <div>
+                <p className="text-sm text-slate-500 m-0">Entregador</p>
+                <p className="font-medium text-slate-700">
+                  {viewingOrder.driver_name}
+                </p>
+              </div>
+            )}
           </div>
         )}
       </Modal>

@@ -1,4 +1,4 @@
-import { Flame, Home, Box, Truck, Users, FileText, Menu, LogOut, User as UserIcon, Bike, UserCog } from 'lucide-react';
+import { Flame, Home, Box, Truck, Users, FileText, Menu, LogOut, User as UserIcon, Bike, UserCog, Handshake , Calendar } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { Button } from 'antd';
@@ -15,6 +15,8 @@ export function Sidebar({ isOpen, toggle }: { isOpen: boolean; toggle: () => voi
     { name: 'Entregadores', path: '/entregadores', icon: Bike },
     { name: 'Colaboradores', path: '/colaboradores', icon: UserCog },
     { name: 'Pesquisa', path: '/pesquisa', icon: Search },
+    { name: 'Entrada', path: '/entrada', icon: Calendar },
+    { name: 'Planilha', path: '/planilha', icon: Handshake },
   ];
 
   const user = useAuthStore((state) => state.user);

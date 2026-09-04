@@ -80,3 +80,59 @@ export const parseCurrency = (value: string) => {
   const numericStr = value.replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, '');
   return parseFloat(numericStr) || 0;
 };
+
+/**
+ * Formata um valor para exibição com 2 casas decimais
+ * Exemplo: 1234560 → 12.345,60
+ */
+export const formatCurrencyDisplay = (value: number | string): string => {
+  if (!value) return '0,00';
+  
+  // Se for string, converter para número
+  const numValue = typeof value === 'string' ? parseFloat(value) : value;
+  
+  if (isNaN(numValue)) return '0,00';
+  
+  // Formatar com 2 casas decimais e substituir . por ,
+  return numValue.toFixed(2).replace('.', ',');
+};
+
+/**
+ * Máscara para campos de valor monetário com vírgula
+ * Permite digitar sem vírgula e formata automaticamente
+ * Exemplo: "1234560" → "12.345,60"
+ */
+export const maskCurrencyInput = (value: string): string => {
+  // Remove tudo que não for número
+  const numbers = value.replace(/\D/g, '');
+  
+  if (numbers === '') return '0,00';
+  
+  // Converte para número e divide por 100 para ter 2 casas decimais
+  const numValue = parseInt(numbers) / 100;
+  
+  // Formata com 2 casas decimais
+  return numValue.toFixed(2).replace('.', ',');
+};
+
+/**
+ * Converte valor formatado para número (sem vírgula)
+ * Exemplo: "12.345,60" → 12345.60
+ */
+export const parseCurrencyValue = (value: string): number => {
+  if (!value) return 0;
+  
+  // Remove pontos de milhar e substitui vírgula por ponto
+  const cleanValue = value.replace(/\./g, '').replace(',', '.');
+  
+  return parseFloat(cleanValue) || 0;
+};
+
+/**
+ * Converte número para valor com vírgula
+ * Exemplo: 12345.60 → "12.345,60"
+ */
+export const numberToCurrency = (value: number): string => {
+  if (!value || isNaN(value)) return '0,00';
+  return value.toFixed(2).replace('.', ',');
+};

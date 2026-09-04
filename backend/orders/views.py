@@ -1,70 +1,133 @@
+# backend/orders/views.py
+import logging
+import traceback
+from decimal import Decimal
+from datetime import datetime
 from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from rest_framework.response import Response
+from django.utils import timezone
+from config.supabase_client import supabase
 
-from config.supabase_client import SupabaseViewSet, supabase
-
-from .models import OrderItem
-from .serializers import OrderItemSerializer
-
+logger = logging.getLogger(__name__)
 
 class OrderViewSet(viewsets.ViewSet):
     """
-    ViewSet para pedidos. Bypassa o ORM Django completamente e usa o Supabase SDK.
-
-    GET  /api/orders/        — lista todos os pedidos com nome de cliente/entregador.
-    POST /api/orders/        — cria pedido com itens, calcula total_amount.
-    GET  /api/orders/{id}/   — detalhe de um pedido com itens.
-
-    Lógica de produto:
-    - O frontend envia product_id como a CATEGORIA (ex: "GLP_13KG_CHEIO")
-    - O backend busca inbound_items por categoria com available_quantity > 0
-    - Insere order_items com inbound_item_id (UUID) e decrementa available_quantity
+    ViewSet para pedidos usando Supabase diretamente.
     """
 
     def list(self, request):
         if not supabase:
             return Response({"error": "Supabase não configurado."}, status=500)
+        
         try:
-            # Busca pedidos com itens via join PostgREST
+            # Buscar pedidos com dados do cliente e entregador
             res = (
                 supabase.table("orders")
-                .select("*, clients(name, trade_name), delivery_drivers(name), order_items(*)")
+                .select("*, clients(name), delivery_drivers(name)")
                 .order("created_at", desc=True)
                 .execute()
             )
+            
             orders = res.data or []
 
-            # Flatten nomes de cliente/entregador para o frontend
+            # Enriquecendo os dados
             for order in orders:
                 client_data = order.pop("clients", None)
                 driver_data = order.pop("delivery_drivers", None)
-                order["client_name"] = (
-                    (client_data.get("trade_name") or client_data.get("name")) if client_data else None
-                )
+                order["client_name"] = client_data.get("name") if client_data else None
                 order["driver_name"] = driver_data.get("name") if driver_data else None
-                # Renomeia order_items para items
-                raw_items = order.pop("order_items", [])
-                items_enriched = []
-                for item in raw_items:
-                    # Enriquece com category do inbound_item se disponível
-                    inbound_item_id = item.get("inbound_item_id")
-                    category = item.get("category", "")
-                    if inbound_item_id and not category:
-                        try:
-                            ib_res = (
-                                supabase.table("inbound_items").select("category").eq("id", inbound_item_id).execute()
-                            )
-                            if ib_res.data:
-                                category = ib_res.data[0].get("category", "")
-                        except Exception:
-                            pass
-                    item["product_name"] = category or item.get("product_id") or ""
-                    item["subtotal"] = float(item.get("unit_price") or 0) * int(item.get("quantity") or 0)
-                    items_enriched.append(item)
-                order["items"] = items_enriched
 
             return Response(orders)
+            
         except Exception as e:
+            logger.error(f"ERRO ao listar pedidos: {str(e)}")
+            logger.error(traceback.format_exc())
+            return Response({"error": str(e)}, status=500)
+
+    def create(self, request):
+        """
+        Cria um novo pedido.
+        Payload esperado:
+        {
+            "client_id": "uuid",
+            "delivery_driver_id": "uuid" | null,
+            "date": "2026-08-28",
+            "product": "P13 - Gas",
+            "unit_cost": 94.50,
+            "quantity": 10,
+            "payment_form": "DINHEIRO",
+            "payment_received": 945.00
+        }
+        """
+        if not supabase:
+            return Response({"error": "Supabase não configurado."}, status=500)
+
+        # Validar campos obrigatórios
+        required_fields = ["client_id", "product", "unit_cost", "quantity", "payment_form"]
+        for field in required_fields:
+            if not request.data.get(field):
+                return Response(
+                    {"error": f"Campo {field} é obrigatório."}, 
+                    status=400
+                )
+
+        quantity = int(request.data.get("quantity", 0))
+        if quantity <= 0:
+            return Response(
+                {"error": "Quantidade deve ser maior que 0."}, 
+                status=400
+            )
+
+        unit_cost = float(request.data.get("unit_cost", 0))
+        total_amount = quantity * unit_cost
+        payment_received = float(request.data.get("payment_received", 0))
+
+        # Se for pagamento a prazo, payment_received deve ser 0
+        payment_form = request.data.get("payment_form")
+        if payment_form == "A PRAZO (VENDA)" and payment_received > 0:
+            payment_received = 0
+
+        # Preparar payload
+        payload = {
+            "client_id": request.data.get("client_id"),
+            "delivery_driver_id": request.data.get("delivery_driver_id") or None,
+            "date": request.data.get("date", timezone.now().date().isoformat()),
+            "product": request.data.get("product"),
+            "unit_cost": unit_cost,
+            "quantity": quantity,
+            "payment_form": payment_form,
+            "payment_received": payment_received,
+            "total_amount": total_amount,
+            "status": "ENTREGUE"
+        }
+
+        try:
+            # Inserir pedido
+            res = supabase.table("orders").insert(payload).execute()
+            if not res.data:
+                return Response(
+                    {"error": "Erro ao criar pedido."}, 
+                    status=500
+                )
+
+            order = res.data[0]
+            
+            # Buscar dados do cliente para resposta
+            client_res = (
+                supabase.table("clients")
+                .select("name")
+                .eq("id", order["client_id"])
+                .execute()
+            )
+            if client_res.data:
+                client = client_res.data[0]
+                order["client_name"] = client.get("name")
+
+            return Response(order, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            logger.error(f"ERRO ao criar pedido: {str(e)}")
             return Response({"error": str(e)}, status=500)
 
     def retrieve(self, request, pk=None):
@@ -73,173 +136,66 @@ class OrderViewSet(viewsets.ViewSet):
         try:
             res = (
                 supabase.table("orders")
-                .select("*, clients(name, trade_name), delivery_drivers(name), order_items(*)")
+                .select("*, clients(name), delivery_drivers(name)")
                 .eq("id", pk)
                 .execute()
             )
             if not res.data:
-                return Response({"error": "Pedido não encontrado."}, status=404)
+                return Response(
+                    {"error": "Pedido não encontrado."}, 
+                    status=404
+                )
+            
             order = res.data[0]
             client_data = order.pop("clients", None)
             driver_data = order.pop("delivery_drivers", None)
-            order["client_name"] = (client_data.get("trade_name") or client_data.get("name")) if client_data else None
+            order["client_name"] = client_data.get("name") if client_data else None
             order["driver_name"] = driver_data.get("name") if driver_data else None
-            order["items"] = order.pop("order_items", [])
-            for item in order["items"]:
-                item["product_name"] = item.get("category") or item.get("product_id") or ""
-                item["subtotal"] = float(item.get("unit_price") or 0) * int(item.get("quantity") or 0)
+            
             return Response(order)
         except Exception as e:
             return Response({"error": str(e)}, status=500)
 
-    def create(self, request):
-        """
-        Payload esperado do frontend:
-        {
-            "client_id": "uuid",
-            "delivery_driver_id": "uuid" | null | "none",
-            "sale_type": "AVISTA" | "FIADO" | "CARTAO",
-            "items": [
-                {"product_id": "GLP_13KG_CHEIO", "quantity": 2, "unit_price": 85.00}
-            ]
-        }
-
-        product_id no frontend = CATEGORIA do inbound_item (ex: "GLP_13KG_CHEIO").
-        O backend resolve para o inbound_item_id correto via available_quantity.
-        """
+    def partial_update(self, request, pk=None):
+        """Atualiza status ou informações de pagamento"""
         if not supabase:
             return Response({"error": "Supabase não configurado."}, status=500)
-
-        client_id = request.data.get("client_id")
-        delivery_driver_id = request.data.get("delivery_driver_id")
-        sale_type = request.data.get("sale_type", "AVISTA")
-        items = request.data.get("items", [])
-
-        if not client_id:
-            return Response({"error": "client_id é obrigatório."}, status=400)
-        if not items:
-            return Response({"error": "Ao menos um item é obrigatório."}, status=400)
-
+        
         try:
-            # Calcula total
-            total_amount = sum(float(i.get("unit_price", 0)) * int(i.get("quantity", 0)) for i in items)
-
-            # Status baseado no tipo de venda
-            status_order = "ABERTO" if sale_type == "FIADO" else "ENTREGUE"
-
-            # 1. Cria o pedido
-            order_payload = {
-                "client_id": client_id,
-                "sale_type": sale_type,
-                "status": status_order,
-                "total_amount": total_amount,
-            }
-            if delivery_driver_id and delivery_driver_id != "none":
-                order_payload["delivery_driver_id"] = delivery_driver_id
-
-            order_res = supabase.table("orders").insert(order_payload).execute()
-            if not order_res.data:
-                return Response({"error": "Erro ao criar pedido."}, status=500)
-
-            order_id = order_res.data[0]["id"]
-
-            # 2. Insere itens do pedido, resolvendo category -> inbound_item_id
-            created_items = []
-            allocation_errors = []
-
-            for item in items:
-                category = item.get("product_id", "")  # frontend envia categoria como product_id
-                quantity_needed = int(item.get("quantity", 0))
-                unit_price = float(item.get("unit_price", 0))
-
-                if quantity_needed <= 0:
-                    continue
-
-                # Busca inbound_items disponíveis por categoria (FIFO: mais antigos primeiro)
-                ib_res = (
-                    supabase.table("inbound_items")
-                    .select("id, available_quantity, category")
-                    .eq("category", category)
-                    .gt("available_quantity", 0)
-                    .order("id")
+            allowed_fields = ["status", "payment_received", "payment_form"]
+            payload = {k: v for k, v in request.data.items() if k in allowed_fields}
+            
+            if not payload:
+                return Response(
+                    {"error": "Nenhum campo válido para atualizar."}, 
+                    status=400
+                )
+            
+            if "payment_received" in payload:
+                order_res = (
+                    supabase.table("orders")
+                    .select("total_amount")
+                    .eq("id", pk)
                     .execute()
                 )
-
-                available_items = ib_res.data or []
-
-                # Aloca o estoque necessário (pode vir de múltiplos inbound_items)
-                remaining = quantity_needed
-                for ib in available_items:
-                    if remaining <= 0:
-                        break
-
-                    ib_id = ib["id"]
-                    ib_avail = ib["available_quantity"]
-                    allocate = min(remaining, ib_avail)
-
-                    # Insere order_item com inbound_item_id
-                    item_payload = {
-                        "order_id": order_id,
-                        "inbound_item_id": ib_id,
-                        "quantity": allocate,
-                        "unit_price": unit_price,
-                    }
-                    item_res = supabase.table("order_items").insert(item_payload).execute()
-
-                    if item_res.data:
-                        created_item = item_res.data[0]
-                        created_item["product_name"] = category
-                        created_item["category"] = category
-                        created_item["subtotal"] = allocate * unit_price
-                        created_items.append(created_item)
-
-                        # Decrementa available_quantity no inbound_item (Invariante 3: estoque não fica negativo)
-                        new_avail = ib_avail - allocate
-                        supabase.table("inbound_items").update({"available_quantity": new_avail}).eq(
-                            "id", ib_id
-                        ).execute()
-
-                    remaining -= allocate
-
-                if remaining > 0:
-                    allocation_errors.append(f"Estoque insuficiente para {category}: faltam {remaining} unidades.")
-
-            if allocation_errors:
-                # Rollback: cancela o pedido criado
-                supabase.table("orders").update({"status": "CANCELADO"}).eq("id", order_id).execute()
-                return Response({"error": " | ".join(allocation_errors)}, status=400)
-
-            return Response(
-                {
-                    "id": order_id,
-                    "client_id": client_id,
-                    "delivery_driver_id": delivery_driver_id,
-                    "sale_type": sale_type,
-                    "status": status_order,
-                    "total_amount": total_amount,
-                    "items": created_items,
-                },
-                status=status.HTTP_201_CREATED,
-            )
-
-        except Exception as e:
-            return Response({"error": str(e)}, status=500)
-
-    def partial_update(self, request, pk=None):
-        """PATCH /api/orders/{id}/ — atualiza status do pedido."""
-        if not supabase:
-            return Response({"error": "Supabase não configurado."}, status=500)
-        try:
-            payload = {k: v for k, v in request.data.items() if k in ("status", "sale_type", "total_amount")}
+                if order_res.data:
+                    total = float(order_res.data[0].get("total_amount", 0))
+                    if float(payload["payment_received"]) > total:
+                        payload["payment_received"] = total
+            
             res = supabase.table("orders").update(payload).eq("id", pk).execute()
             if not res.data:
-                return Response({"error": "Pedido não encontrado."}, status=404)
+                return Response(
+                    {"error": "Pedido não encontrado."}, 
+                    status=404
+                )
+            
             return Response(res.data[0])
         except Exception as e:
             return Response({"error": str(e)}, status=500)
 
     def destroy(self, request, pk=None):
-        """DELETE /api/orders/{id}/ — cancela o pedido (soft)."""
+        """Cancela o pedido (soft delete)"""
         if not supabase:
             return Response({"error": "Supabase não configurado."}, status=500)
         try:
@@ -248,8 +204,162 @@ class OrderViewSet(viewsets.ViewSet):
         except Exception as e:
             return Response({"error": str(e)}, status=500)
 
+    @action(detail=False, methods=['get'], url_path='worksheet')
+    def worksheet(self, request):
+        """
+        Endpoint para planilha do dia por funcionário.
+        Query params:
+            - driver_id: UUID do entregador
+            - date: data no formato YYYY-MM-DD
+        """
+        if not supabase:
+            return Response({"error": "Supabase não configurado."}, status=500)
 
-class OrderItemViewSet(SupabaseViewSet):
-    queryset = OrderItem.objects.all()
-    serializer_class = OrderItemSerializer
-    table_name = "order_items"
+        driver_id = request.query_params.get('driver_id')
+        date = request.query_params.get('date')
+
+        if not driver_id:
+            return Response({"error": "driver_id é obrigatório."}, status=400)
+        if not date:
+            return Response({"error": "date é obrigatório."}, status=400)
+
+        try:
+            # Validar formato da data
+            datetime.strptime(date, '%Y-%m-%d')
+        except ValueError:
+            return Response({"error": "date deve estar no formato YYYY-MM-DD."}, status=400)
+
+        try:
+            # 1. Buscar ORDERS do dia e funcionário
+            orders_res = (
+                supabase.table("orders")
+                .select("*, clients(name)")
+                .eq("delivery_driver_id", driver_id)
+                .eq("date", date)
+                .execute()
+            )
+            orders = orders_res.data or []
+
+            # 2. Buscar PAYMENTS do dia e funcionário
+            payments_res = (
+                supabase.table("payments")
+                .select("*, clients(name), orders(product)")
+                .eq("delivery_driver_id", driver_id)
+                .eq("date", date)
+                .execute()
+            )
+            payments = payments_res.data or []
+
+            # 3. Buscar CASH_ENTRIES do dia e funcionário
+            cash_res = (
+                supabase.table("cash_entries")
+                .select("*")
+                .eq("delivery_driver_id", driver_id)
+                .eq("date", date)
+                .execute()
+            )
+            cash_entries = cash_res.data or []
+
+            # 4. Calcular totais financeiros
+            totals = {
+                "DINHEIRO": Decimal('0.00'),
+                "PIX": Decimal('0.00'),
+                "CREDITO": Decimal('0.00'),
+                "DEBITO": Decimal('0.00'),
+                "CHEQUE": Decimal('0.00'),
+                "TOTAL": Decimal('0.00')
+            }
+
+            # Orders à vista (exclui "A PRAZO (VENDA)")
+            for order in orders:
+                payment_form = order.get("payment_form")
+                if payment_form and payment_form != "A PRAZO (VENDA)":
+                    amount = Decimal(str(order.get("total_amount", 0)))
+                    if payment_form in totals:
+                        totals[payment_form] += amount
+                    totals["TOTAL"] += amount
+
+            # Payments (todos são recebimentos efetivos)
+            for payment in payments:
+                method = payment.get("payment_method")
+                amount = Decimal(str(payment.get("amount", 0)))
+                if method in totals:
+                    totals[method] += amount
+                totals["TOTAL"] += amount
+
+            # Formatar totais para float
+            formatted_totals = {k: float(v) for k, v in totals.items()}
+
+            return Response({
+                "orders": orders,
+                "payments": payments,
+                "cash_entries": cash_entries,
+                "totals": formatted_totals
+            })
+
+        except Exception as e:
+            logger.error(f"ERRO ao buscar planilha: {str(e)}")
+            logger.error(traceback.format_exc())
+            return Response({"error": str(e)}, status=500)
+
+
+class OrderItemViewSet(viewsets.ViewSet):
+    """ViewSet para itens de pedido"""
+    
+    def list(self, request):
+        if not supabase:
+            return Response({"error": "Supabase não configurado."}, status=500)
+        try:
+            res = supabase.table("order_items").select("*").execute()
+            return Response(res.data)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+@action(detail=False, methods=['get'], url_path='pending')
+def pending_orders(self, request):
+    """
+    Busca vendas a prazo que ainda têm saldo pendente.
+    Query params: client_id (opcional)
+    """
+    if not supabase:
+        return Response({"error": "Supabase não configurado."}, status=500)
+    
+    client_id = request.query_params.get('client_id')
+    
+    try:
+        # Buscar vendas a prazo
+        query = supabase.table("orders").select("*, clients(name)")
+        query = query.eq("payment_form", "A PRAZO")
+        
+        if client_id:
+            query = query.eq("client_id", client_id)
+        
+        result = query.execute()
+        orders = result.data or []
+        
+        # Calcular saldo pendente
+        pending = []
+        for order in orders:
+            total = float(order.get("total_amount", 0))
+            received = float(order.get("payment_received", 0))
+            pending_amount = total - received
+            
+            if pending_amount > 0:
+                client_data = order.pop("clients", None)
+                pending.append({
+                    "id": order.get("id"),
+                    "client_id": order.get("client_id"),
+                    "client_name": client_data.get("name") if client_data else None,
+                    "product": order.get("product"),
+                    "quantity": order.get("quantity"),
+                    "total_amount": total,
+                    "payment_received": received,
+                    "pending_amount": pending_amount,
+                    "date": order.get("date")
+                })
+        
+        return Response(pending)
+        
+    except Exception as e:
+        logger.error(f"ERRO ao buscar vendas pendentes: {str(e)}")
+        return Response({"error": str(e)}, status=500)

@@ -83,26 +83,30 @@ export interface DeliveryDriver {
   created_at?: string;
 }
 
-export interface OrderItem {
-  id: string;
-  order_id: string;
-  product_id: string;
-  product_name?: string;
-  quantity: number;
-  unit_price: number;
-  subtotal: number;
-}
-
 export interface Order {
   id: string;
   client_id: string;
   client_name?: string;
   delivery_driver_id?: string;
   driver_name?: string;
-  sale_type: string;
-  status: 'ABERTO' | 'ENTREGUE' | 'CANCELADO';
-  due_date?: string;
-  total_amount: number;
+  date: string; // Data da venda
+  product: string; // Produto vendido
+  unit_cost: number; // Preço unitário
+  quantity: number; // Quantidade
+  payment_form: string; // Forma de pagamento
+  payment_received: number; // Valor recebido
+  total_amount: number; // Valor total
+  status: string; // Status do pedido
+  sale_type?: string; // Para compatibilidade
   created_at: string;
-  items?: OrderItem[];
+  updated_at?: string;
+}
+
+export interface OrderItem {
+  id: string;
+  order_id: string;
+  product: string;
+  quantity: number;
+  unit_price: number;
+  subtotal?: number;
 }

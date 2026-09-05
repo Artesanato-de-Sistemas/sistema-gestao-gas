@@ -3,48 +3,45 @@ import uuid
 from django.db import models
 
 
-class Client(models.Model):
+class Funcionario(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.TextField(null=True, blank=True)
-    document = models.TextField(null=True, blank=True)
-    phone = models.TextField(null=True, blank=True)
-    email = models.TextField(null=True, blank=True)
-    trade_name = models.TextField(null=True, blank=True)
-    person_type = models.TextField(default="FISICA", null=True, blank=True)
-    active = models.BooleanField(default=True, null=True, blank=True)
-    payment_deadline_days = models.IntegerField(default=0, null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
-    updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
+    nome = models.TextField()
+    email = models.TextField(unique=True)
+    senha = models.TextField()
+    cpf = models.TextField(null=True, blank=True)
+    telefone = models.TextField(null=True, blank=True)
+    role = models.TextField(default="VENDEDOR")
+    ativo = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         managed = False
-        db_table = "clients"
+        db_table = "funcionarios"
 
 
-class Employee(models.Model):
+class Cliente(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.TextField()
-    document = models.TextField(null=True, blank=True)
-    phone = models.TextField(null=True, blank=True)
-    email = models.TextField(null=True, blank=True)
-    role = models.TextField(default="SECRETARIO")
-    active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+    nome = models.TextField()
+    cpf_cnpj = models.TextField(null=True, blank=True)
+    telefone = models.TextField(null=True, blank=True)
+    rua_numero = models.TextField(null=True, blank=True)
+    bairro = models.TextField(null=True, blank=True)
+    cidade = models.TextField(default="Cataguases", null=True, blank=True)
+    limite_credito = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    created_by = models.UUIDField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         managed = False
-        db_table = "employees"
+        db_table = "clientes"
 
 
-class DeliveryDriver(models.Model):
+class ValorCliente(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.TextField(null=True, blank=True)
-    document = models.TextField(null=True, blank=True)
-    phone = models.TextField(null=True, blank=True)
-    commission_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=0, null=True, blank=True)
-    active = models.BooleanField(default=True, null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+    id_cliente = models.UUIDField()
+    id_produto = models.UUIDField()
+    valor_especifico = models.DecimalField(max_digits=10, decimal_places=2)
 
     class Meta:
         managed = False
-        db_table = "delivery_drivers"
+        db_table = "valor_cliente"

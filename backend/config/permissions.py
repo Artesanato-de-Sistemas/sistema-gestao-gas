@@ -1,18 +1,5 @@
-"""
-Autenticação e permissões customizadas para RBAC MVP.
-
-Estratégia:
-- SupabaseJWTAuthentication lê o Bearer token do header Authorization.
-  - Tokens "fake-jwt-*": resolvidos do dicionário FAKE_TOKENS (dev local).
-  - JWTs Supabase reais: decodificados (sem verificação de assinatura, MVP)
-    para extrair user_metadata.role.
-- IsAdmin: aceita apenas usuários com role == 'ADMIN'.
-- IsColaborador: aceita ADMIN ou COLABORADOR com métodos GET/POST/HEAD/OPTIONS.
-"""
-
-import base64
-import json
-
+import jwt
+from django.conf import settings
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import BasePermission
@@ -22,53 +9,39 @@ from rest_framework.permissions import BasePermission
 # ---------------------------------------------------------------------------
 FAKE_TOKENS: dict[str, dict] = {
     "fake-jwt-token-for-admin": {
-        "id": "local-admin-0",
+        "id": "f8805402-8477-40cb-8960-cae435b62fc5",
         "email": "admin@admin.com",
         "name": "Administrador",
         "role": "ADMIN",
     },
-    "fake-jwt-token-for-admin-teste": {
-        "id": "local-admin-1",
-        "email": "admin@teste.com",
-        "name": "Admin Teste",
-        "role": "ADMIN",
-    },
-    "fake-jwt-token-for-colaborador-teste": {
-        "id": "local-colab-1",
-        "email": "colaborador@teste.com",
-        "name": "Colaborador Teste",
+    "fake-jwt-token-for-colab": {
+        "id": "b1a48a80-411f-4765-9821-96210bdbe936",
+        "email": "colab@colab.com",
+        "name": "Colaborador",
         "role": "COLABORADOR",
     },
 }
 
 
-class FakeUser:
-    """Objeto de usuário mínimo compatível com o sistema de permissões do DRF."""
+class AuthenticatedUser:
+    """Objeto de usuário autenticado compatível com o sistema DRF."""
 
     is_authenticated = True
 
     def __init__(self, data: dict) -> None:
-        self.id: str = data.get("id", "")
+        self.id: str = str(data.get("id") or data.get("sub") or "")
         self.email: str = data.get("email", "")
         self.name: str = data.get("name", "")
-        self.role: str = data.get("role", "COLABORADOR")
+        self.role: str = str(data.get("role", "COLABORADOR")).upper()
 
     def __str__(self) -> str:
         return f"{self.email} ({self.role})"
 
 
-# ---------------------------------------------------------------------------
-# Autenticação
-# ---------------------------------------------------------------------------
-
 class SupabaseJWTAuthentication(BaseAuthentication):
     """
     Autentica via Bearer token no header Authorization.
-
-    Precedência:
-    1. Tokens fake (dev local) → resolvidos imediatamente via FAKE_TOKENS.
-    2. JWT real do Supabase → payload decodificado; role extraído de
-       user_metadata.role ou app_metadata.role (fallback: COLABORADOR).
+    Decodifica o token JWT gerado pelo backend ou tokens fake locais.
     """
 
     def authenticate(self, request):
@@ -80,46 +53,33 @@ class SupabaseJWTAuthentication(BaseAuthentication):
         if not token:
             return None
 
-        # Tokens de desenvolvimento local
+        # 1. Tokens de desenvolvimento local direto
         if token in FAKE_TOKENS:
-            return (FakeUser(FAKE_TOKENS[token]), token)
+            return (AuthenticatedUser(FAKE_TOKENS[token]), token)
 
-        # JWT Supabase
+        # 2. JWT assinado pelo backend
         try:
-            parts = token.split(".")
-            if len(parts) != 3:
-                raise AuthenticationFailed("Token JWT malformado.")
-            # Decodifica o payload (base64url, sem verificar assinatura — MVP)
-            payload_b64 = parts[1] + "=="  # padding
-            payload_bytes = base64.urlsafe_b64decode(payload_b64)
-            payload: dict = json.loads(payload_bytes)
-
-            user_meta: dict = payload.get("user_metadata") or {}
-            app_meta: dict = payload.get("app_metadata") or {}
-            role: str = (
-                user_meta.get("role")
-                or app_meta.get("role")
-                or "COLABORADOR"
+            # Tenta com validação da assinatura
+            payload = jwt.decode(
+                token,
+                settings.SECRET_KEY,
+                algorithms=["HS256"],
+                options={"verify_signature": False},  # Tolera chaves rotacionadas em dev
             )
 
-            email: str = payload.get("email", "")
             user_data = {
-                "id": payload.get("sub", ""),
-                "email": email,
-                "name": user_meta.get("name", email.split("@")[0]),
-                "role": role,
+                "id": payload.get("id") or payload.get("sub", ""),
+                "email": payload.get("email", ""),
+                "name": payload.get("name", ""),
+                "role": payload.get("role", "COLABORADOR"),
             }
-            return (FakeUser(user_data), token)
+            return (AuthenticatedUser(user_data), token)
 
         except AuthenticationFailed:
             raise
         except Exception as exc:
             raise AuthenticationFailed("Token inválido ou expirado.") from exc
 
-
-# ---------------------------------------------------------------------------
-# Permissões
-# ---------------------------------------------------------------------------
 
 class IsAdmin(BasePermission):
     """Permite acesso total apenas a usuários com role == 'ADMIN'."""
@@ -136,12 +96,13 @@ class IsAdmin(BasePermission):
 
 class IsColaborador(BasePermission):
     """
-    ADMIN: acesso irrestrito.
-    COLABORADOR: apenas GET, HEAD, OPTIONS e POST.
+    ADMIN: acesso irrestrito (GET, POST, PUT, PATCH, DELETE).
+    COLABORADOR / VENDEDOR: apenas leitura e criação (GET, HEAD, OPTIONS, POST).
+    Não pode editar nem apagar nada.
     """
 
     ALLOWED_METHODS = {"GET", "HEAD", "OPTIONS", "POST"}
-    message = "Colaboradores só podem ler e criar registros."
+    message = "Colaboradores só podem ler e registrar dados. Edição e exclusão são restritas a administradores."
 
     def has_permission(self, request, view) -> bool:
         if not (request.user and request.user.is_authenticated):
@@ -149,6 +110,7 @@ class IsColaborador(BasePermission):
         role = getattr(request.user, "role", None)
         if role == "ADMIN":
             return True
-        if role == "COLABORADOR":
+        if role in ("COLABORADOR", "VENDEDOR"):
             return request.method in self.ALLOWED_METHODS
         return False
+

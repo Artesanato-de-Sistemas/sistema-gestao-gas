@@ -22,6 +22,7 @@ echo ""
 echo "   Para parar, pressione Ctrl+C ou rode: bash down.sh"
 
 # Salva os PIDs para o down.sh usar
+mkdir -p .pids
 echo "$BACKEND_PID" > .pids/backend.pid
 echo "$FRONTEND_PID" > .pids/frontend.pid
 

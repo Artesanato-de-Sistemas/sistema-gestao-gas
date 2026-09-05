@@ -1,12 +1,12 @@
-# backend/orders/urls.py
-from django.urls import path, include
+from django.urls import include, path
 from rest_framework.routers import DefaultRouter
-from .views import OrderViewSet, OrderItemViewSet
+
+from .views import VendaViewSet
 
 router = DefaultRouter()
-router.register(r'orders', OrderViewSet, basename='order')
-router.register(r'order-items', OrderItemViewSet, basename='order-item')
+router.register(r"vendas", VendaViewSet, basename="vendas")
+router.register(r"orders", VendaViewSet, basename="orders")
 
 urlpatterns = [
-    path('', include(router.urls)),
+    path("", include(router.urls)),
 ]

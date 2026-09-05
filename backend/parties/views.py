@@ -1,191 +1,313 @@
-from datetime import datetime, timezone
+import logging
 
-from rest_framework import status
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.views import APIView
 
+from config.permissions import IsAdmin, IsColaborador
 from config.supabase_client import SupabaseViewSet, supabase
 
-from .models import Client, DeliveryDriver, Employee
-from .serializers import ClientSerializer, DeliveryDriverSerializer, EmployeeSerializer
+logger = logging.getLogger(__name__)
 
 
-class ClientViewSet(SupabaseViewSet):
-    queryset = Client.objects.all()
-    serializer_class = ClientSerializer
-    table_name = "clients"
+class ClienteViewSet(SupabaseViewSet):
+    table_name = "clientes"
+    permission_classes = [IsColaborador]
 
-    def destroy(self, request, *args, **kwargs):
-        """Soft delete — inativa ao invés de excluir fisicamente."""
+    def list(self, request, *args, **kwargs):
         if not supabase:
             return Response({"error": "Supabase não configurado."}, status=500)
-        pk = kwargs.get("pk")
         try:
-            supabase.table("clients").update({"active": False}).eq("id", pk).execute()
-            return Response(status=status.HTTP_204_NO_CONTENT)
+            # 1. Busca clientes
+            query = supabase.table("clientes").select("*").order("nome")
+            res = query.execute()
+            clients = res.data or []
+
+            # 2. Busca totais de vendas por cliente
+            vendas_res = supabase.table("vendas").select("id_cliente, valor_total").is_("deleted_at", "null").execute()
+            vendas_map = {}
+            for v in (vendas_res.data or []):
+                cid = str(v.get("id_cliente"))
+                vendas_map[cid] = vendas_map.get(cid, 0.0) + float(v.get("valor_total") or 0)
+
+            # 3. Busca totais de pagamentos por cliente
+            pagamentos_res = supabase.table("pagamentos").select("id_cliente, valor").execute()
+            pagamentos_map = {}
+            for p in (pagamentos_res.data or []):
+                cid = str(p.get("id_cliente"))
+                pagamentos_map[cid] = pagamentos_map.get(cid, 0.0) + float(p.get("valor") or 0)
+
+            search = request.query_params.get("search", "").strip().lower()
+            apenas_com_debito = request.query_params.get("apenas_com_debito", "").lower() in ("true", "1")
+
+            enriched = []
+            for c in clients:
+                cid = str(c["id"])
+                tot_vendas = round(vendas_map.get(cid, 0.0), 2)
+                tot_pago = round(pagamentos_map.get(cid, 0.0), 2)
+                saldo_devedor = round(max(0.0, tot_vendas - tot_pago), 2)
+
+                c["total_vendas"] = tot_vendas
+                c["total_pago"] = tot_pago
+                c["saldo_devedor"] = saldo_devedor
+                c["isInadimplente"] = saldo_devedor > 0
+
+                # Filtro por busca de texto
+                if search:
+                    name_match = search in (c.get("nome") or "").lower()
+                    doc_match = search in (c.get("cpf_cnpj") or "").lower()
+                    phone_match = search in (c.get("telefone") or "").lower()
+                    bairro_match = search in (c.get("bairro") or "").lower()
+                    if not (name_match or doc_match or phone_match or bairro_match):
+                        continue
+
+                # Filtro por inadimplente
+                if apenas_com_debito and saldo_devedor <= 0:
+                    continue
+
+                enriched.append(c)
+
+            return Response(enriched)
+        except Exception as e:
+            logger.error(f"Erro ao listar clientes: {e}")
+            return Response({"error": str(e)}, status=500)
+
+    def create(self, request, *args, **kwargs):
+        if not supabase:
+            return Response({"error": "Supabase não configurado."}, status=500)
+        data = dict(request.data)
+        if not data.get("nome"):
+            return Response({"error": "Nome do cliente é obrigatório."}, status=400)
+
+        payload = {
+            "nome": data.get("nome", "").strip(),
+            "cpf_cnpj": data.get("cpf_cnpj") or None,
+            "telefone": data.get("telefone") or None,
+            "rua_numero": data.get("rua_numero") or None,
+            "bairro": data.get("bairro") or None,
+            "cidade": data.get("cidade") or "Cataguases",
+            "limite_credito": float(data.get("limite_credito") or 0.0),
+        }
+        if request.user and request.user.is_authenticated and getattr(request.user, "id", None):
+            payload["created_by"] = request.user.id
+
+        try:
+            res = supabase.table("clientes").insert(payload).execute()
+            if not res.data:
+                return Response({"error": "Falha ao criar cliente."}, status=500)
+            return Response(res.data[0], status=status.HTTP_201_CREATED)
         except Exception as e:
             return Response({"error": str(e)}, status=500)
 
-
-class EmployeeViewSet(SupabaseViewSet):
-    """
-    ViewSet de funcionários.
-    Usa a tabela 'users' do Supabase, que contém os dados de funcionários
-    (role: ADMINISTRADOR, SECRETARIO, ENTREGADOR, etc.).
-    A tabela 'employees' foi planejada mas ainda não criada; 'users' serve o mesmo propósito.
-    """
-
-    queryset = Employee.objects.all()
-    serializer_class = EmployeeSerializer
-    table_name = "users"  # Tabela real no Supabase (employees não existe ainda)
-
-    def destroy(self, request, *args, **kwargs):
-        """Soft delete — inativa ao invés de excluir fisicamente."""
+    @action(detail=True, methods=["get"])
+    def historico(self, request, pk=None):
+        """Retorna histórico completo do cliente: vendas, pagamentos, débitos e preços específicos."""
         if not supabase:
             return Response({"error": "Supabase não configurado."}, status=500)
-        pk = kwargs.get("pk")
         try:
-            supabase.table("users").update({"active": False}).eq("id", pk).execute()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        except Exception as e:
-            return Response({"error": str(e)}, status=500)
+            # 1. Dados do cliente
+            cli_res = supabase.table("clientes").select("*").eq("id", pk).execute()
+            if not cli_res.data:
+                return Response({"error": "Cliente não encontrado."}, status=404)
+            client = cli_res.data[0]
 
-
-class DeliveryDriverViewSet(SupabaseViewSet):
-    queryset = DeliveryDriver.objects.all()
-    serializer_class = DeliveryDriverSerializer
-    table_name = "delivery_drivers"
-
-    def destroy(self, request, *args, **kwargs):
-        """Soft delete — inativa ao invés de excluir fisicamente."""
-        if not supabase:
-            return Response({"error": "Supabase não configurado."}, status=500)
-        pk = kwargs.get("pk")
-        try:
-            supabase.table("delivery_drivers").update({"active": False}).eq("id", pk).execute()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        except Exception as e:
-            return Response({"error": str(e)}, status=500)
-
-
-class DriversDashboardView(APIView):
-    """
-    GET /api/dashboard/drivers?period=Hoje|Semana|Mês
-    Retorna relatório financeiro por entregador.
-    """
-
-    authentication_classes = []
-    permission_classes = []
-
-    def get(self, request):
-        if not supabase:
-            return Response({"error": "Supabase não configurado."}, status=500)
-
-        period = request.query_params.get("period", "Hoje")
-
-        try:
-            from datetime import datetime, timedelta, timezone
-
-            now = datetime.now(timezone.utc)
-            if period == "Hoje":
-                since = now.replace(hour=0, minute=0, second=0, microsecond=0)
-            elif period == "Semana":
-                since = now - timedelta(days=7)
-            else:  # Mês ou Mes (sem acento — compatibilidade com clientes que não encodam URL)
-                since = now - timedelta(days=30)
-
-            since_str = since.isoformat()
-
-            # Busca entregadores ativos
-            drivers_res = supabase.table("delivery_drivers").select("id, name").eq("active", True).execute()
-            drivers = drivers_res.data or []
-
-            # Busca ordens no período
-            orders_res = (
-                supabase.table("orders")
-                .select("id, delivery_driver_id, total_amount, status")
-                .gte("created_at", since_str)
+            # 2. Vendas do cliente
+            vendas_res = (
+                supabase.table("vendas")
+                .select("*, funcionarios(nome), itens_venda(*, produtos(nome))")
+                .eq("id_cliente", pk)
+                .is_("deleted_at", "null")
+                .order("created_at", desc=True)
                 .execute()
             )
-            orders = orders_res.data or []
+            vendas = vendas_res.data or []
 
-            report = []
-            for driver in drivers:
-                driver_id = driver["id"]
-                driver_orders = [o for o in orders if o.get("delivery_driver_id") == driver_id]
-                gross_amount = sum(
-                    float(o.get("total_amount") or 0) for o in driver_orders if o.get("status") != "CANCELADO"
-                )
-                cylinders_sold = len(driver_orders)
-                # Sangria: pode ser expandida futuramente com tabela de saques
-                withdrawals = 0.0
-                net_profit = gross_amount - withdrawals
+            # 3. Pagamentos do cliente
+            pagamentos_res = (
+                supabase.table("pagamentos")
+                .select("*")
+                .eq("id_cliente", pk)
+                .order("created_at", desc=True)
+                .execute()
+            )
+            pagamentos = pagamentos_res.data or []
 
-                report.append(
-                    {
-                        "driverId": driver_id,
-                        "driverName": driver["name"],
-                        "cylindersSold": cylinders_sold,
-                        "grossAmount": gross_amount,
-                        "withdrawals": withdrawals,
-                        "netProfit": net_profit,
-                    }
-                )
+            # 4. Preços específicos configurados
+            precos_res = (
+                supabase.table("valor_cliente")
+                .select("*, produtos(nome, valor_padrao)")
+                .eq("id_cliente", pk)
+                .execute()
+            )
+            precos = precos_res.data or []
 
-            return Response(report)
+            total_vendas = sum(float(v.get("valor_total") or 0) for v in vendas)
+            total_pago = sum(float(p.get("valor") or 0) for p in pagamentos)
+            saldo_devedor = round(max(0.0, total_vendas - total_pago), 2)
 
+            return Response({
+                "cliente": client,
+                "total_vendas": round(total_vendas, 2),
+                "total_pago": round(total_pago, 2),
+                "saldo_devedor": saldo_devedor,
+                "vendas": vendas,
+                "pagamentos": pagamentos,
+                "precos_especificos": precos,
+            })
         except Exception as e:
             return Response({"error": str(e)}, status=500)
 
-
-class DashboardMetricsView(APIView):
-    """
-    GET /api/dashboard/metrics — métricas gerais do sistema para a tela de Dashboard.
-    """
-
-    authentication_classes = []
-    permission_classes = []
-
-    def get(self, request):
+    @action(detail=True, methods=["get", "post"], url_path="precos")
+    def precos(self, request, pk=None):
+        """Lista ou define preços específicos para um cliente."""
         if not supabase:
             return Response({"error": "Supabase não configurado."}, status=500)
 
+        if request.method == "GET":
+            try:
+                res = (
+                    supabase.table("valor_cliente")
+                    .select("*, produtos(nome, valor_padrao)")
+                    .eq("id_cliente", pk)
+                    .execute()
+                )
+                return Response(res.data or [])
+            except Exception as e:
+                return Response({"error": str(e)}, status=500)
+
+        # POST: salva ou atualiza valor específico
+        id_produto = request.data.get("id_produto")
+        valor_especifico = request.data.get("valor_especifico")
+        if not id_produto or valor_especifico is None:
+            return Response({"error": "id_produto e valor_especifico são obrigatórios."}, status=400)
+
         try:
-            now = datetime.now(timezone.utc)
-            today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-
-            # Estoque por categoria (calculado via inbound_items.available_quantity)
-            items_res = supabase.table("inbound_items").select("category, available_quantity").execute()
-            items = items_res.data or []
-
-            stock_p13 = sum(
-                (i.get("available_quantity", 0) or 0) for i in items if "GLP_13KG_CHEIO" in (i.get("category") or "")
+            # Verifica se já existe preço configurado para esse par (cliente, produto)
+            existing = (
+                supabase.table("valor_cliente")
+                .select("id")
+                .eq("id_cliente", pk)
+                .eq("id_produto", id_produto)
+                .execute()
             )
-            stock_p20 = sum(
-                (i.get("available_quantity", 0) or 0) for i in items if "GLP_20KG_CHEIO" in (i.get("category") or "")
-            )
-            stock_p45 = sum(
-                (i.get("available_quantity", 0) or 0) for i in items if "GLP_45KG_CHEIO" in (i.get("category") or "")
-            )
-
-            # Vendas de hoje
-            orders_res = (
-                supabase.table("orders").select("total_amount, status").gte("created_at", today_start).execute()
-            )
-            orders_today = orders_res.data or []
-            finished_orders = [o for o in orders_today if o.get("status") == "ENTREGUE"]
-            sales_today = sum(float(o.get("total_amount") or 0) for o in finished_orders)
-
-            return Response(
-                {
-                    "stock_p13": stock_p13,
-                    "stock_p20": stock_p20,
-                    "stock_p45": stock_p45,
-                    "sales_today": sales_today,
-                    "orders_today": len(finished_orders),
-                    "overdue_invoices": 0,  # Expandível futuramente
-                }
-            )
-
+            if existing.data and len(existing.data) > 0:
+                rec_id = existing.data[0]["id"]
+                res = (
+                    supabase.table("valor_cliente")
+                    .update({"valor_especifico": float(valor_especifico)})
+                    .eq("id", rec_id)
+                    .execute()
+                )
+            else:
+                res = (
+                    supabase.table("valor_cliente")
+                    .insert({
+                        "id_cliente": pk,
+                        "id_produto": id_produto,
+                        "valor_especifico": float(valor_especifico),
+                    })
+                    .execute()
+                )
+            return Response(res.data[0] if res.data else {}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=500)
+
+
+class FuncionarioViewSet(viewsets.ViewSet):
+    """
+    Lista funcionários para seleção nas telas operacionais e gestão de usuários (Admin).
+    """
+
+    def get_permissions(self):
+        if self.action in ["list", "retrieve"]:
+            return [IsColaborador()]
+        return [IsAdmin()]
+
+    def list(self, request):
+        if not supabase:
+            return Response({"error": "Supabase não configurado."}, status=500)
+        try:
+            # Oculta o campo 'senha' por segurança na resposta
+            res = (
+                supabase.table("funcionarios")
+                .select("id, nome, email, cpf, telefone, role, ativo, created_at")
+                .order("nome")
+                .execute()
+            )
+            return Response(res.data or [])
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+    def retrieve(self, request, pk=None):
+        if not supabase:
+            return Response({"error": "Supabase não configurado."}, status=500)
+        try:
+            res = (
+                supabase.table("funcionarios")
+                .select("id, nome, email, cpf, telefone, role, ativo, created_at")
+                .eq("id", pk)
+                .execute()
+            )
+            if not res.data:
+                return Response({"error": "Funcionário não encontrado."}, status=404)
+            return Response(res.data[0])
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+    def create(self, request):
+        if not supabase:
+            return Response({"error": "Supabase não configurado."}, status=500)
+        data = request.data
+        if not data.get("nome") or not data.get("email") or not data.get("senha"):
+            return Response({"error": "Nome, email e senha são obrigatórios."}, status=400)
+
+        payload = {
+            "nome": data["nome"].strip(),
+            "email": data["email"].strip().lower(),
+            "senha": str(data["senha"]),
+            "cpf": data.get("cpf") or None,
+            "telefone": data.get("telefone") or None,
+            "role": data.get("role", "VENDEDOR").upper(),
+            "ativo": data.get("ativo", True),
+        }
+        try:
+            res = supabase.table("funcionarios").insert(payload).execute()
+            if not res.data:
+                return Response({"error": "Falha ao criar funcionário."}, status=500)
+            created = res.data[0]
+            created.pop("senha", None)
+            return Response(created, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+    def partial_update(self, request, pk=None):
+        if not supabase:
+            return Response({"error": "Supabase não configurado."}, status=500)
+        allowed = {"nome", "cpf", "telefone", "role", "ativo", "senha"}
+        payload = {k: v for k, v in request.data.items() if k in allowed}
+        if not payload:
+            return Response({"error": "Nenhum campo válido para atualizar."}, status=400)
+        try:
+            res = supabase.table("funcionarios").update(payload).eq("id", pk).execute()
+            if not res.data:
+                return Response({"error": "Funcionário não encontrado."}, status=404)
+            updated = res.data[0]
+            updated.pop("senha", None)
+            return Response(updated)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+    def destroy(self, request, pk=None):
+        if not supabase:
+            return Response({"error": "Supabase não configurado."}, status=500)
+        try:
+            # Soft inativação
+            supabase.table("funcionarios").update({"ativo": False}).eq("id", pk).execute()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+
+class ValorClienteViewSet(SupabaseViewSet):
+    table_name = "valor_cliente"
+    permission_classes = [IsColaborador]

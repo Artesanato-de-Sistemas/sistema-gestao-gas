@@ -3,18 +3,11 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Login } from '@/pages/Login';
 import { Dashboard } from '@/pages/Dashboard';
-import { Inbounds } from '@/pages/Inbounds';
-import { DriversDashboard } from '@/pages/DriversDashboard';
 import { Customers } from '@/pages/Customers';
-import { Sales } from '@/pages/Sales';
-import { Stock } from '@/pages/Stock';
-import { Employees } from '@/pages/Employees';
-import { useAuthStore } from '@/store/useAuth';
-import { Pesquisa } from '@/pages/Pesquisa';
+import { Entrada } from '@/pages/Entrada';
 import { Planilha } from '@/pages/Planilha';
-import { SystemSettings } from '@/pages/SystemSettings';
-import { MyProfile } from '@/pages/MyProfile';
-import { Entrada } from '@/pages/Entrada'; 
+import { Pesquisa } from '@/pages/Pesquisa';
+import { useAuthStore } from '@/store/useAuth';
 
 /** Redireciona para /login se não autenticado. */
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -23,11 +16,17 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-/** Redireciona para / se não for ADMIN. */
+/** Redireciona para /planilha se não for ADMIN. */
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const isAdmin = useAuthStore((state) => state.isAdmin);
-  if (!isAdmin) return <Navigate to="/" replace />;
+  if (!isAdmin) return <Navigate to="/planilha" replace />;
   return <>{children}</>;
+}
+
+/** Redirecionamento da raiz baseado na role */
+function HomeRedirect() {
+  const isAdmin = useAuthStore((state) => state.isAdmin);
+  return <Navigate to={isAdmin ? "/dashboard" : "/planilha"} replace />;
 }
 
 export function AppRoutes() {
@@ -43,29 +42,37 @@ export function AppRoutes() {
           </PrivateRoute>
         }
       >
-        <Route index element={<Navigate to="/inbounds" replace />} />
-        <Route path="inbounds" element={<Inbounds />} />
-        <Route path="dashboard" element={<Dashboard />} />
-        <Route path="estoque" element={<Stock />} />
-        <Route path="colaboradores" element={<Employees />} />
-        <Route path="entregadores" element={<DriversDashboard />} />
-        <Route path="vendas" element={<Sales />} />
-        <Route path="clientes" element={<Customers />} />
-        <Route path="pesquisa" element={<Pesquisa />} />
-        <Route path="planilha" element={<Planilha />} />
-        {/* Rotas de perfil — visível a todos autenticados */}
-        <Route path="meus-dados" element={<MyProfile />} />
-        <Route path="/entrada" element={<Entrada />} />
+        <Route index element={<HomeRedirect />} />
 
-        {/* Rotas de administração — exclusivas para ADMIN */}
+        {/* Rotas de Colaborador e Administrador */}
+        <Route path="entrada" element={<Entrada />} />
+        <Route path="inbounds" element={<Navigate to="/entrada" replace />} />
+        <Route path="planilha" element={<Planilha />} />
+        <Route path="clientes" element={<Customers />} />
+
+        {/* Rotas Exclusivas do Administrador */}
         <Route
-          path="definicoes"
+          path="dashboard"
           element={
             <AdminRoute>
-              <SystemSettings />
+              <Dashboard />
             </AdminRoute>
           }
         />
+        <Route
+          path="pesquisa"
+          element={
+            <AdminRoute>
+              <Pesquisa />
+            </AdminRoute>
+          }
+        />
+
+        {/* Redirecionamentos legados */}
+        <Route path="vendas" element={<Navigate to="/planilha" replace />} />
+        <Route path="estoque" element={<Navigate to="/entrada" replace />} />
+        <Route path="entregadores" element={<Navigate to="/pesquisa" replace />} />
+        <Route path="colaboradores" element={<Navigate to="/dashboard" replace />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

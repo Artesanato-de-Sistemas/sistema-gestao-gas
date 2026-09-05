@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 from .models import Order, OrderItem
 
+
 class OrderWorksheetSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     client_id = serializers.UUIDField()
@@ -12,7 +13,7 @@ class OrderWorksheetSerializer(serializers.Serializer):
     total_amount = serializers.DecimalField(max_digits=10, decimal_places=2)
     payment_form = serializers.CharField()
     date = serializers.DateField()
-    
+
     def get_client_name(self, obj):
         return obj.get('clients', {}).get('name') if obj.get('clients') else None
 
@@ -25,7 +26,7 @@ class PaymentWorksheetSerializer(serializers.Serializer):
     payment_method = serializers.CharField()
     date = serializers.DateField()
     notes = serializers.CharField(required=False, allow_null=True)
-    
+
     def get_client_name(self, obj):
         return obj.get('clients', {}).get('name') if obj.get('clients') else None
 

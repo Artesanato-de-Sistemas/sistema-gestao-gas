@@ -1,27 +1,19 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from .views import (
-    ClientViewSet,
-    DashboardMetricsView,
-    DeliveryDriverViewSet,
-    DriversDashboardView,
-    EmployeeViewSet,
-)
+from .views import ClienteViewSet, FuncionarioViewSet, ValorClienteViewSet
 
 router = DefaultRouter()
-router.register(r"clients", ClientViewSet)
-router.register(r"employees", EmployeeViewSet)
-router.register(r"delivery-drivers", DeliveryDriverViewSet)
-# Alias /drivers -> DeliveryDriverViewSet (compatibilidade com frontend)
-router.register(r"drivers", DeliveryDriverViewSet, basename="drivers")
+router.register(r"clientes", ClienteViewSet, basename="clientes")
+router.register(r"clients", ClienteViewSet, basename="clients")
+
+router.register(r"funcionarios", FuncionarioViewSet, basename="funcionarios")
+router.register(r"employees", FuncionarioViewSet, basename="employees")
+router.register(r"drivers", FuncionarioViewSet, basename="drivers")
+router.register(r"delivery-drivers", FuncionarioViewSet, basename="delivery-drivers")
+
+router.register(r"valor-cliente", ValorClienteViewSet, basename="valor-cliente")
 
 urlpatterns = [
     path("", include(router.urls)),
-    # Dashboard financeiro de entregadores
-    path("dashboard/drivers", DriversDashboardView.as_view(), name="drivers-dashboard"),
-    path("dashboard/drivers/", DriversDashboardView.as_view(), name="drivers-dashboard-slash"),
-    # Dashboard de métricas gerais
-    path("dashboard/metrics", DashboardMetricsView.as_view(), name="dashboard-metrics"),
-    path("dashboard/metrics/", DashboardMetricsView.as_view(), name="dashboard-metrics-slash"),
 ]

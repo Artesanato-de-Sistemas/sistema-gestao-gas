@@ -1,296 +1,676 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Card, Select, DatePicker, Button, Table, message, Spin } from 'antd';
-import { Search, BarChart2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import {
+  Card,
+  Tabs,
+  DatePicker,
+  Select,
+  Button,
+  Table,
+  Tag,
+  Typography,
+  Spin,
+  message,
+} from 'antd';
+import {
+  Search,
+  Box,
+  DollarSign,
+  Bike,
+  FileSpreadsheet,
+  Download,
+  Printer,
+  Calendar,
+} from 'lucide-react';
 import { api } from '@/services/api';
 import { formatCurrency, formatDate } from '@/utils/formatters';
-import type { ColumnsType } from 'antd/es/table';
 import dayjs, { Dayjs } from 'dayjs';
 
-const ANALYSES = [
-  { value: 'sales_by_driver_monthly', label: '📊 Vendas por Entregador por Mês' },
-];
+const { Text } = Typography;
 
-interface MonthlySalesData {
-  driver_id: string;
-  driver_name: string;
-  month: string;
-  order_count: number;
-  total_sales: number;
-  avg_order_value: number;
+// Função utilitária para exportar qualquer array de dados para CSV
+function exportToCSV(filename: string, headers: string[], rows: (string | number)[][]) {
+  const csvContent =
+    'data:text/csv;charset=utf-8,\uFEFF' +
+    [headers.join(';'), ...rows.map((e) => e.map((val) => `"${val}"`).join(';'))].join('\n');
+
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement('a');
+  link.setAttribute('href', encodedUri);
+  link.setAttribute('download', `${filename}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
 
 export function Pesquisa() {
-  const [selectedAnalysis, setSelectedAnalysis] = useState(ANALYSES[0].value);
-  const [loading, setLoading] = useState(false);
-  const [rawData, setRawData] = useState<MonthlySalesData[]>([]);
-  
-  const [selectedDrivers, setSelectedDrivers] = useState<string[]>([]);
-  const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
-  
-  const [drivers, setDrivers] = useState<{ id: string; name: string }[]>([]);
+  const [activeTab, setActiveTab] = useState<string>('estoque');
+
+  // Filtros Globais
+  const [dataEstoque, setDataEstoque] = useState<Dayjs>(dayjs());
+  const [dataFinanceiro, setDataFinanceiro] = useState<Dayjs>(dayjs());
+  const [periodoEntregadores, setPeriodoEntregadores] = useState<string>('diario');
+  const [dataInicioAvancada, setDataInicioAvancada] = useState<Dayjs | null>(dayjs().subtract(7, 'days'));
+  const [dataFimAvancada, setDataFimAvancada] = useState<Dayjs | null>(dayjs());
+  const [selectedFuncionario, setSelectedFuncionario] = useState<string>('');
+  const [selectedCliente, setSelectedCliente] = useState<string>('');
+  const [selectedProduto, setSelectedProduto] = useState<string>('');
+
+  // Opções de Seleção
+  const [funcionarios, setFuncionarios] = useState<any[]>([]);
+  const [clientes, setClientes] = useState<any[]>([]);
+  const [produtos, setProdutos] = useState<any[]>([]);
+
+  // Estados de Dados
+  const [estoqueData, setEstoqueData] = useState<any[]>([]);
+  const [financeiroData, setFinanceiroData] = useState<any | null>(null);
+  const [entregadoresData, setEntregadoresData] = useState<any[]>([]);
+  const [avancadaData, setAvancadaData] = useState<any[]>([]);
+
+  const [loading, setLoading] = useState<boolean>(false);
 
   useEffect(() => {
-    api.get('/drivers').then(res => {
-      setDrivers(res.data);
-    }).catch(err => console.error(err));
+    // Carrega opções de filtro
+    Promise.all([
+      api.get('/funcionarios/'),
+      api.get('/clientes/'),
+      api.get('/produtos/'),
+    ])
+      .then(([fRes, cRes, pRes]) => {
+        setFuncionarios(fRes.data || []);
+        setClientes(cRes.data || []);
+        setProdutos(pRes.data || []);
+      })
+      .catch((err) => console.error('Erro ao carregar filtros:', err));
   }, []);
 
-  const handleSearch = async () => {
+  // 1. Busca Estoque Diário
+  const fetchEstoque = async () => {
     setLoading(true);
     try {
-      let params: any = {};
-      
-      if (selectedDrivers.length > 0) {
-        params.driver_ids = selectedDrivers.join(',');
-      }
-      if (dateRange && dateRange[0] && dateRange[1]) {
-        params.start_month = dateRange[0].format('YYYY-MM');
-        params.end_month = dateRange[1].format('YYYY-MM');
-      } else if (dateRange && dateRange[0]) {
-        params.start_month = dateRange[0].format('YYYY-MM');
-        params.end_month = dateRange[0].format('YYYY-MM');
-      }
-      
-      const res = await api.get('/sales-by-driver-monthly/', { params });
-      setRawData(res.data);
-      if (res.data.length === 0) {
-        message.info('Nenhum dado encontrado para os filtros selecionados.');
-      }
-    } catch (error) {
-      console.error(error);
-      message.error('Erro ao buscar dados');
+      const res = await api.get('/pesquisa/estoque/', {
+        params: { data: dataEstoque.format('YYYY-MM-DD') },
+      });
+      setEstoqueData(res.data || []);
+    } catch (err) {
+      message.error('Erro ao carregar dados de estoque.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Transformar dados para tabela
-  const { tableData, months } = useMemo(() => {
-    if (!rawData.length) {
-      return { tableData: [], months: [] };
+  // 2. Busca Financeiro Diário
+  const fetchFinanceiro = async () => {
+    setLoading(true);
+    try {
+      const res = await api.get('/pesquisa/financeiro/', {
+        params: { data: dataFinanceiro.format('YYYY-MM-DD') },
+      });
+      setFinanceiroData(res.data || null);
+    } catch (err) {
+      message.error('Erro ao carregar dados financeiros.');
+    } finally {
+      setLoading(false);
     }
+  };
 
-    // Extrair todos os meses únicos e ordenar
-    const uniqueMonths = Array.from(new Set(rawData.map(item => item.month))).sort();
-    
-    // Agrupar por driver
-    const driverMap = new Map();
-    rawData.forEach(item => {
-      const key = item.driver_id;
-      if (!driverMap.has(key)) {
-        driverMap.set(key, {
-          driver_id: item.driver_id,
-          driver_name: item.driver_name,
-          months: {},
-        });
-      }
-      const entry = driverMap.get(key);
-      entry.months[item.month] = {
-        order_count: item.order_count,
-        total_sales: item.total_sales,
-        avg_order_value: item.avg_order_value,
-      };
-    });
-
-    // Construir linhas da tabela
-    const rows = Array.from(driverMap.values()).map(driver => {
-      const row: any = {
-        key: driver.driver_id,
-        driver: driver.driver_name,
-        driver_id: driver.driver_id,
-      };
-      uniqueMonths.forEach(month => {
-        const data = driver.months[month];
-        if (data) {
-          row[month] = {
-            order_count: data.order_count,
-            total_sales: data.total_sales,
-            avg_order_value: data.avg_order_value,
-          };
-        } else {
-          row[month] = {
-            order_count: 0,
-            total_sales: 0,
-            avg_order_value: 0,
-          };
-        }
+  // 3. Busca Entregadores
+  const fetchEntregadores = async () => {
+    setLoading(true);
+    try {
+      const res = await api.get('/pesquisa/entregadores/', {
+        params: { periodo: periodoEntregadores },
       });
-      // Calcular totais
-      let totalOrders = 0;
-      let totalSales = 0;
-      uniqueMonths.forEach(month => {
-        const data = driver.months[month];
-        if (data) {
-          totalOrders += data.order_count;
-          totalSales += data.total_sales;
-        }
-      });
-      row.totalOrders = totalOrders;
-      row.totalSales = totalSales;
-      row.avgOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0;
-      return row;
-    });
+      setEntregadoresData(res.data || []);
+    } catch (err) {
+      message.error('Erro ao carregar dados de entregadores.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    rows.sort((a, b) => a.driver.localeCompare(b.driver));
+  // 4. Busca Pesquisa Avançada
+  const fetchAvancada = async () => {
+    setLoading(true);
+    try {
+      const params: any = {};
+      if (dataInicioAvancada) params.data_inicio = dataInicioAvancada.format('YYYY-MM-DD');
+      if (dataFimAvancada) params.data_fim = dataFimAvancada.format('YYYY-MM-DD');
+      if (selectedFuncionario) params.id_funcionario = selectedFuncionario;
+      if (selectedCliente) params.id_cliente = selectedCliente;
+      if (selectedProduto) params.id_produto = selectedProduto;
 
-    return { tableData: rows, months: uniqueMonths };
-  }, [rawData]);
+      const res = await api.get('/pesquisa/avancada/', { params });
+      setAvancadaData(res.data || []);
+    } catch (err) {
+      message.error('Erro ao carregar pesquisa avançada.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // Construir colunas
-  const columns = useMemo((): ColumnsType<any> => {
-    if (!months.length) return [];
+  // Dispara busca conforme aba ativa ou filtro correspondente
+  useEffect(() => {
+    if (activeTab === 'estoque') fetchEstoque();
+    if (activeTab === 'financeiro') fetchFinanceiro();
+    if (activeTab === 'entregadores') fetchEntregadores();
+    if (activeTab === 'avancada') fetchAvancada();
+  }, [activeTab, dataEstoque, dataFinanceiro, periodoEntregadores]);
 
-    const cols: ColumnsType<any> = [
-      {
-        title: 'Entregador',
-        dataIndex: 'driver',
-        key: 'driver',
-        fixed: 'left',
-        width: 180,
-        render: (text: string) => (
-          <span className="font-semibold">{text}</span>
-        ),
-      },
+  // Handlers de Exportação
+  const exportEstoque = () => {
+    const headers = ['Produto', 'Categoria', 'Entradas no Dia', 'Saídas no Dia', 'Saldo Disponível Atual'];
+    const rows = estoqueData.map((e) => [
+      e.produto,
+      e.categoria,
+      e.entradas_dia,
+      e.saidas_dia,
+      e.saldo_disponivel,
+    ]);
+    exportToCSV(`relatorio_estoque_${dataEstoque.format('YYYY-MM-DD')}`, headers, rows);
+  };
+
+  const exportFinanceiro = () => {
+    if (!financeiroData) return;
+    const headers = ['Métrica / Forma', 'Valor (R$)'];
+    const rows: (string | number)[][] = [
+      ['Total Vendas Bruto', financeiroData.total_vendas_bruto],
+      ['Total Recebido', financeiroData.total_recebido],
+      ['Total Sangrias', financeiroData.total_sangrias],
+      ['Balanço Líquido', financeiroData.balanco_liquido],
     ];
-
-    // Adicionar colunas para cada mês
-    months.forEach(month => {
-      const monthLabel = dayjs(month + '-01').format('MMM/YYYY');
-      cols.push({
-        title: monthLabel,
-        key: month,
-        align: 'center',
-        render: (_, record) => {
-          const data = record[month];
-          if (!data || data.order_count === 0) {
-            return <span className="text-slate-400 text-sm">-</span>;
-          }
-          return (
-            <div className="space-y-0.5">
-              <div className="text-xs text-slate-500">
-                {data.order_count} vendas
-              </div>
-              <div className="text-sm font-medium text-slate-800">
-                {formatCurrency(data.total_sales)}
-              </div>
-              <div className="text-xs text-slate-400">
-                Média: {formatCurrency(data.avg_order_value)}
-              </div>
-            </div>
-          );
-        },
-        sorter: (a, b) => {
-          const aData = a[month] || { total_sales: 0 };
-          const bData = b[month] || { total_sales: 0 };
-          return aData.total_sales - bData.total_sales;
-        },
-      });
+    Object.entries(financeiroData.totais_por_forma || {}).forEach(([forma, val]) => {
+      rows.push([`Recebido: ${forma}`, val as number]);
     });
+    exportToCSV(`relatorio_financeiro_${dataFinanceiro.format('YYYY-MM-DD')}`, headers, rows);
+  };
 
-    // Coluna de Total
-    cols.push({
-      title: 'Total',
-      key: 'total',
-      align: 'center',
-      render: (_, record) => (
-        <div className="space-y-0.5">
-          <div className="text-xs text-slate-500">
-            {record.totalOrders || 0} vendas
-          </div>
-          <div className="text-sm font-bold text-orange-600">
-            {formatCurrency(record.totalSales || 0)}
-          </div>
-          <div className="text-xs text-slate-400">
-            Média: {formatCurrency(record.avgOrderValue || 0)}
-          </div>
-        </div>
-      ),
-      fixed: 'right',
-      sorter: (a, b) => (a.totalSales || 0) - (b.totalSales || 0),
-    });
+  const exportEntregadores = () => {
+    const headers = ['Funcionário / Entregador', 'Função', 'Pedidos', 'Cilindros Vendidos', 'Valor Faturado (R$)', 'Sangrias (R$)', 'Saldo Líquido (R$)', 'Ticket Médio (R$)'];
+    const rows = entregadoresData.map((e) => [
+      e.nome,
+      e.role,
+      e.pedidos_count,
+      e.itens_vendidos,
+      e.valor_faturado,
+      e.valor_sangrias,
+      e.saldo_liquido,
+      e.ticket_medio,
+    ]);
+    exportToCSV(`relatorio_entregadores_${periodoEntregadores}`, headers, rows);
+  };
 
-    return cols;
-  }, [months]);
-
-  const driverOptions = drivers.map(d => ({ value: d.id, label: d.name }));
+  const exportAvancada = () => {
+    const headers = ['Data', 'Hora', 'Cliente', 'Telefone', 'Funcionário', 'Produtos', 'Qtd Total', 'Valor Total (R$)'];
+    const rows = avancadaData.map((a) => [
+      a.data,
+      a.hora,
+      a.cliente,
+      a.telefone,
+      a.funcionario,
+      a.produtos,
+      a.quantidade_total,
+      a.valor_total,
+    ]);
+    exportToCSV(`relatorio_avancado`, headers, rows);
+  };
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-800 flex items-center gap-2 m-0">
-            <BarChart2 className="w-6 h-6 text-orange-500" />
-            Pesquisa Avançada
-          </h2>
-          <p className="text-slate-500 mt-1 mb-0">Teste novas visões de dados antes de fixá-las no Dashboard.</p>
-        </div>
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold tracking-tight text-slate-800 flex items-center gap-2 m-0">
+          <Search className="w-6 h-6 text-orange-500" />
+          Central de Pesquisas e Relatórios
+        </h2>
+        <p className="text-slate-500 mt-1 mb-0">
+          Cruze dados de estoque em tempo real, financeiro diário, entregadores e gere relatórios com exportação.
+        </p>
       </div>
 
-      <Card className="border-slate-100 shadow-sm rounded-2xl p-2" styles={{ body: { padding: '16px' } }}>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="space-y-1">
-            <label className="text-slate-600 font-medium">Análise</label>
-            <Select
-              value={selectedAnalysis}
-              onChange={setSelectedAnalysis}
-              className="w-full h-10"
-              options={ANALYSES}
-            />
-          </div>
+      <Card className="border-slate-100 shadow-sm rounded-2xl p-2" styles={{ body: { padding: '16px 20px' } }}>
+        <Tabs
+          activeKey={activeTab}
+          onChange={setActiveTab}
+          className="pesquisa-tabs"
+          items={[
+            // ================= SUB-ABA 1: ESTOQUE =================
+            {
+              key: 'estoque',
+              label: (
+                <span className="flex items-center gap-2 text-base font-medium py-1">
+                  <Box className="w-4 h-4 text-orange-500" />
+                  Estoque Diário
+                </span>
+              ),
+              children: (
+                <div className="space-y-5 pt-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-semibold text-slate-700">Data de Referência:</span>
+                      <DatePicker
+                        format="DD/MM/YYYY"
+                        className="h-10 w-44"
+                        value={dataEstoque}
+                        onChange={(d) => setDataEstoque(d || dayjs())}
+                      />
+                      <Button onClick={fetchEstoque} loading={loading} className="h-10 rounded-xl">
+                        Atualizar
+                      </Button>
+                    </div>
 
-          <div className="space-y-1">
-            <label className="text-slate-600 font-medium">Entregador(es)</label>
-            <Select
-              mode="multiple"
-              placeholder="Todos"
-              className="w-full h-10"
-              value={selectedDrivers}
-              onChange={setSelectedDrivers}
-              options={driverOptions}
-              allowClear
-              maxTagCount={2}
-            />
-          </div>
+                    <Button
+                      type="primary"
+                      icon={<Download className="w-4 h-4" />}
+                      className="bg-orange-500 hover:bg-orange-600 border-none h-10 rounded-xl font-medium"
+                      onClick={exportEstoque}
+                    >
+                      Exportar CSV
+                    </Button>
+                  </div>
 
-          <div className="space-y-1">
-            <label className="text-slate-600 font-medium">Período</label>
-            <DatePicker.RangePicker
-              picker="month"
-              className="w-full h-10"
-              value={dateRange}
-              onChange={(dates) => setDateRange(dates as [Dayjs | null, Dayjs | null] | null)}
-              placeholder={['Mês Inicial', 'Mês Final']}
-              format="MMM/YYYY"
-            />
-          </div>
-        </div>
+                  <Table
+                    dataSource={estoqueData}
+                    rowKey="id_produto"
+                    loading={loading}
+                    pagination={false}
+                    columns={[
+                      {
+                        title: 'Produto',
+                        dataIndex: 'produto',
+                        key: 'produto',
+                        render: (p: string) => <span className="font-semibold text-slate-800">{p}</span>,
+                      },
+                      {
+                        title: 'Categoria',
+                        dataIndex: 'categoria',
+                        key: 'categoria',
+                        render: (c: string) => <Tag color="blue">{c}</Tag>,
+                      },
+                      {
+                        title: 'Preço Padrão',
+                        dataIndex: 'valor_padrao',
+                        key: 'valor_padrao',
+                        align: 'right' as const,
+                        render: (v: number) => <span>{formatCurrency(v)}</span>,
+                      },
+                      {
+                        title: 'Entradas no Dia',
+                        dataIndex: 'entradas_dia',
+                        key: 'entradas_dia',
+                        align: 'center' as const,
+                        render: (v: number) => <span className="font-medium text-green-600">+{v} un</span>,
+                      },
+                      {
+                        title: 'Saídas no Dia (Tempo Real)',
+                        dataIndex: 'saidas_dia',
+                        key: 'saidas_dia',
+                        align: 'center' as const,
+                        render: (v: number) => <span className="font-medium text-red-500">-{v} un</span>,
+                      },
+                      {
+                        title: 'Saldo Disponível Atual',
+                        dataIndex: 'saldo_disponivel',
+                        key: 'saldo_disponivel',
+                        align: 'center' as const,
+                        render: (v: number) => (
+                          <Tag color={v <= 3 ? 'error' : v <= 10 ? 'warning' : 'green'} className="font-bold text-sm px-3 py-1">
+                            {v} unidades
+                          </Tag>
+                        ),
+                      },
+                    ]}
+                  />
+                </div>
+              ),
+            },
 
-        <div className="mt-4 flex justify-end">
-          <Button type="primary" icon={<Search className="w-4 h-4" />} onClick={handleSearch} loading={loading}>
-            Executar Pesquisa
-          </Button>
-        </div>
-      </Card>
+            // ================= SUB-ABA 2: FINANCEIRO =================
+            {
+              key: 'financeiro',
+              label: (
+                <span className="flex items-center gap-2 text-base font-medium py-1">
+                  <DollarSign className="w-4 h-4 text-green-600" />
+                  Financeiro Diário
+                </span>
+              ),
+              children: (
+                <div className="space-y-5 pt-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-semibold text-slate-700">Data de Referência:</span>
+                      <DatePicker
+                        format="DD/MM/YYYY"
+                        className="h-10 w-44"
+                        value={dataFinanceiro}
+                        onChange={(d) => setDataFinanceiro(d || dayjs())}
+                      />
+                      <Button onClick={fetchFinanceiro} loading={loading} className="h-10 rounded-xl">
+                        Atualizar
+                      </Button>
+                    </div>
 
-      <Card className="border-slate-100 shadow-sm rounded-2xl overflow-x-auto" styles={{ body: { padding: 0 } }}>
-        <Spin spinning={loading}>
-          {tableData.length > 0 ? (
-            <Table
-              columns={columns}
-              dataSource={tableData}
-              pagination={false}
-              scroll={{ x: 'max-content' }}
-              bordered
-              className="w-full"
-            />
-          ) : (
-            <div className="text-center py-10 text-slate-400">
-              {rawData.length === 0 && !loading 
-                ? 'Nenhum dado encontrado. Ajuste os filtros e execute a pesquisa.' 
-                : 'Carregando dados...'}
-            </div>
-          )}
-        </Spin>
+                    <Button
+                      type="primary"
+                      icon={<Download className="w-4 h-4" />}
+                      className="bg-orange-500 hover:bg-orange-600 border-none h-10 rounded-xl font-medium"
+                      onClick={exportFinanceiro}
+                    >
+                      Exportar CSV
+                    </Button>
+                  </div>
+
+                  {financeiroData && (
+                    <>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                          <div className="text-xs text-slate-500 font-medium">Vendas Bruto</div>
+                          <div className="text-xl font-bold text-slate-800 mt-1">
+                            {formatCurrency(financeiroData.total_vendas_bruto || 0)}
+                          </div>
+                        </div>
+
+                        <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                          <div className="text-xs text-slate-500 font-medium">Total Recebido</div>
+                          <div className="text-xl font-bold text-green-600 mt-1">
+                            {formatCurrency(financeiroData.total_recebido || 0)}
+                          </div>
+                        </div>
+
+                        <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                          <div className="text-xs text-slate-500 font-medium">Sangrias Retiradas</div>
+                          <div className="text-xl font-bold text-red-500 mt-1">
+                            - {formatCurrency(financeiroData.total_sangrias || 0)}
+                          </div>
+                        </div>
+
+                        <div className="p-4 bg-orange-50 border border-orange-100 rounded-xl">
+                          <div className="text-xs text-orange-600 font-semibold">Balanço Líquido Caixa</div>
+                          <div className="text-xl font-bold text-orange-600 mt-1">
+                            {formatCurrency(financeiroData.balanco_liquido || 0)}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="p-4 bg-white border border-slate-100 rounded-xl">
+                        <div className="text-sm font-semibold text-slate-700 mb-3">
+                          Recebimentos por Forma de Pagamento
+                        </div>
+                        <div className="flex flex-wrap gap-3">
+                          {Object.entries(financeiroData.totais_por_forma || {}).map(([forma, val]) => (
+                            <div key={forma} className="p-3 bg-slate-50 border border-slate-100 rounded-lg min-w-36">
+                              <span className="text-xs text-slate-400 block">{forma}</span>
+                              <span className="text-base font-bold text-slate-800">
+                                {formatCurrency(val as number)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ),
+            },
+
+            // ================= SUB-ABA 3: ENTREGADORES =================
+            {
+              key: 'entregadores',
+              label: (
+                <span className="flex items-center gap-2 text-base font-medium py-1">
+                  <Bike className="w-4 h-4 text-blue-600" />
+                  Entregadores
+                </span>
+              ),
+              children: (
+                <div className="space-y-5 pt-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-semibold text-slate-700">Período de Análise:</span>
+                      <Select
+                        className="h-10 w-44"
+                        value={periodoEntregadores}
+                        onChange={setPeriodoEntregadores}
+                        options={[
+                          { value: 'diario', label: 'Diário (Hoje)' },
+                          { value: 'semanal', label: 'Últimos 7 Dias' },
+                          { value: 'mensal', label: 'Últimos 30 Dias' },
+                          { value: 'overall', label: 'Geral / Overall' },
+                        ]}
+                      />
+                      <Button onClick={fetchEntregadores} loading={loading} className="h-10 rounded-xl">
+                        Atualizar
+                      </Button>
+                    </div>
+
+                    <Button
+                      type="primary"
+                      icon={<Download className="w-4 h-4" />}
+                      className="bg-orange-500 hover:bg-orange-600 border-none h-10 rounded-xl font-medium"
+                      onClick={exportEntregadores}
+                    >
+                      Exportar CSV
+                    </Button>
+                  </div>
+
+                  <Table
+                    dataSource={entregadoresData}
+                    rowKey="id_funcionario"
+                    loading={loading}
+                    pagination={{ pageSize: 10 }}
+                    columns={[
+                      {
+                        title: 'Funcionário / Entregador',
+                        dataIndex: 'nome',
+                        key: 'nome',
+                        render: (n: string) => <span className="font-semibold text-slate-800">{n}</span>,
+                      },
+                      {
+                        title: 'Função',
+                        dataIndex: 'role',
+                        key: 'role',
+                        render: (r: string) => <Tag color="cyan">{r}</Tag>,
+                      },
+                      {
+                        title: 'Vendas (Pedidos)',
+                        dataIndex: 'pedidos_count',
+                        key: 'pedidos_count',
+                        align: 'center' as const,
+                        render: (c: number) => <span className="font-medium">{c}</span>,
+                      },
+                      {
+                        title: 'Cilindros / Itens',
+                        dataIndex: 'itens_vendidos',
+                        key: 'itens_vendidos',
+                        align: 'center' as const,
+                        render: (c: number) => <span className="font-semibold text-slate-800">{c} un</span>,
+                      },
+                      {
+                        title: 'Faturamento Bruto',
+                        dataIndex: 'valor_faturado',
+                        key: 'valor_faturado',
+                        align: 'right' as const,
+                        render: (v: number) => (
+                          <span className="font-bold text-slate-800">{formatCurrency(v)}</span>
+                        ),
+                      },
+                      {
+                        title: 'Sangrias',
+                        dataIndex: 'valor_sangrias',
+                        key: 'valor_sangrias',
+                        align: 'right' as const,
+                        render: (v: number) => (
+                          <span className="font-medium text-red-500">- {formatCurrency(v)}</span>
+                        ),
+                      },
+                      {
+                        title: 'Saldo Líquido',
+                        dataIndex: 'saldo_liquido',
+                        key: 'saldo_liquido',
+                        align: 'right' as const,
+                        render: (v: number) => (
+                          <span className="font-bold text-green-600">{formatCurrency(v)}</span>
+                        ),
+                      },
+                      {
+                        title: 'Ticket Médio',
+                        dataIndex: 'ticket_medio',
+                        key: 'ticket_medio',
+                        align: 'right' as const,
+                        render: (v: number) => <span>{formatCurrency(v)}</span>,
+                      },
+                    ]}
+                  />
+                </div>
+              ),
+            },
+
+            // ================= SUB-ABA 4: PESQUISA AVANÇADA =================
+            {
+              key: 'avancada',
+              label: (
+                <span className="flex items-center gap-2 text-base font-medium py-1">
+                  <FileSpreadsheet className="w-4 h-4 text-purple-600" />
+                  Pesquisa Avançada
+                </span>
+              ),
+              children: (
+                <div className="space-y-5 pt-2">
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-slate-500 uppercase">Data Início</label>
+                        <DatePicker
+                          format="DD/MM/YYYY"
+                          className="w-full h-10"
+                          value={dataInicioAvancada}
+                          onChange={setDataInicioAvancada}
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-slate-500 uppercase">Data Fim</label>
+                        <DatePicker
+                          format="DD/MM/YYYY"
+                          className="w-full h-10"
+                          value={dataFimAvancada}
+                          onChange={setDataFimAvancada}
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-slate-500 uppercase">Funcionário</label>
+                        <Select
+                          className="w-full h-10"
+                          placeholder="Todos"
+                          allowClear
+                          value={selectedFuncionario || undefined}
+                          onChange={setSelectedFuncionario}
+                          options={funcionarios.map((f) => ({ value: f.id, label: f.nome }))}
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-slate-500 uppercase">Cliente</label>
+                        <Select
+                          className="w-full h-10"
+                          showSearch
+                          optionFilterProp="label"
+                          placeholder="Todos"
+                          allowClear
+                          value={selectedCliente || undefined}
+                          onChange={setSelectedCliente}
+                          options={clientes.map((c) => ({ value: c.id, label: c.nome }))}
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-slate-500 uppercase">Produto</label>
+                        <Select
+                          className="w-full h-10"
+                          placeholder="Todos"
+                          allowClear
+                          value={selectedProduto || undefined}
+                          onChange={setSelectedProduto}
+                          options={produtos.map((p) => ({ value: p.id, label: p.nome }))}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-1">
+                      <Button onClick={fetchAvancada} loading={loading} type="primary" className="bg-slate-800 h-10 px-5 rounded-xl">
+                        Executar Filtros
+                      </Button>
+                      <Button
+                        icon={<Download className="w-4 h-4" />}
+                        className="bg-orange-500 text-white hover:!bg-orange-600 border-none h-10 px-5 rounded-xl font-medium"
+                        onClick={exportAvancada}
+                      >
+                        Exportar Relatório CSV
+                      </Button>
+                    </div>
+                  </div>
+
+                  <Table
+                    dataSource={avancadaData}
+                    rowKey="id"
+                    loading={loading}
+                    pagination={{ pageSize: 12 }}
+                    scroll={{ x: 800 }}
+                    columns={[
+                      {
+                        title: 'Data / Hora',
+                        key: 'data',
+                        render: (_: any, r: any) => (
+                          <div>
+                            <span className="font-semibold text-slate-800">{r.data}</span>
+                            <div className="text-xs text-slate-400">{r.hora}</div>
+                          </div>
+                        ),
+                      },
+                      {
+                        title: 'Cliente',
+                        dataIndex: 'cliente',
+                        key: 'cliente',
+                        render: (c: string, r: any) => (
+                          <div>
+                            <span className="font-semibold text-slate-800">{c}</span>
+                            <div className="text-xs text-slate-400">{r.telefone}</div>
+                          </div>
+                        ),
+                      },
+                      {
+                        title: 'Funcionário',
+                        dataIndex: 'funcionario',
+                        key: 'funcionario',
+                        render: (f: string) => <span>{f}</span>,
+                      },
+                      {
+                        title: 'Produtos e Quantidades',
+                        dataIndex: 'produtos',
+                        key: 'produtos',
+                      },
+                      {
+                        title: 'Qtd Total',
+                        dataIndex: 'quantidade_total',
+                        key: 'quantidade_total',
+                        align: 'center' as const,
+                        render: (q: number) => <span className="font-bold">{q}</span>,
+                      },
+                      {
+                        title: 'Valor Total',
+                        dataIndex: 'valor_total',
+                        key: 'valor_total',
+                        align: 'right' as const,
+                        render: (v: number) => (
+                          <span className="font-bold text-orange-600">{formatCurrency(v)}</span>
+                        ),
+                      },
+                    ]}
+                  />
+                </div>
+              ),
+            },
+          ]}
+        />
       </Card>
     </div>
   );

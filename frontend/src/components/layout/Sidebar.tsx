@@ -1,27 +1,31 @@
-import { Flame, Home, Box, Truck, Users, FileText, Menu, LogOut, User as UserIcon, Bike, UserCog, Handshake , Calendar } from 'lucide-react';
+import { Home, Truck, Users, Menu, LogOut, User as UserIcon, Handshake, Search } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { Button } from 'antd';
+import { Button, Tag } from 'antd';
 import { useAuthStore } from '@/store/useAuth';
-import { Search } from 'lucide-react';
 
 export function Sidebar({ isOpen, toggle }: { isOpen: boolean; toggle: () => void }) {
-  const routes = [
-    { name: 'Entradas', path: '/inbounds', icon: Truck },
+  const user = useAuthStore((state) => state.user);
+  const isAdmin = useAuthStore((state) => state.isAdmin);
+  const logout = useAuthStore((state) => state.logout);
+
+  // Define rotas baseado na role do usuário
+  const adminRoutes = [
     { name: 'Dashboard', path: '/dashboard', icon: Home },
-    { name: 'Estoque', path: '/estoque', icon: Box },
-    { name: 'Vendas', path: '/vendas', icon: FileText },
-    { name: 'Clientes', path: '/clientes', icon: Users },
-    { name: 'Entregadores', path: '/entregadores', icon: Bike },
-    { name: 'Colaboradores', path: '/colaboradores', icon: UserCog },
-    { name: 'Pesquisa', path: '/pesquisa', icon: Search },
-    { name: 'Entrada', path: '/entrada', icon: Calendar },
+    { name: 'Entrada', path: '/entrada', icon: Truck },
     { name: 'Planilha', path: '/planilha', icon: Handshake },
+    { name: 'Pesquisa', path: '/pesquisa', icon: Search },
+    { name: 'Clientes', path: '/clientes', icon: Users },
   ];
 
-  const user = useAuthStore((state) => state.user);
-  const logout = useAuthStore((state) => state.logout);
-  
+  const colabRoutes = [
+    { name: 'Entrada', path: '/entrada', icon: Truck },
+    { name: 'Planilha', path: '/planilha', icon: Handshake },
+    { name: 'Clientes', path: '/clientes', icon: Users },
+  ];
+
+  const routes = isAdmin ? adminRoutes : colabRoutes;
+
   return (
     <aside
       className={cn(
@@ -35,7 +39,12 @@ export function Sidebar({ isOpen, toggle }: { isOpen: boolean; toggle: () => voi
             <img src="/logo.png" alt="" className="h-10 w-auto object-contain" referrerPolicy="no-referrer" />
           </div>
         )}
-        <Button type="text" onClick={toggle} className={cn("text-white hover:!bg-white/20 hover:!text-white shrink-0 z-10 flex items-center justify-center p-0 w-8 h-8", isOpen ? "absolute right-2" : "")} icon={<Menu className="w-5 h-5" color="white" />} />
+        <Button
+          type="text"
+          onClick={toggle}
+          className={cn("text-white hover:!bg-white/20 hover:!text-white shrink-0 z-10 flex items-center justify-center p-0 w-8 h-8", isOpen ? "absolute right-2" : "")}
+          icon={<Menu className="w-5 h-5" color="white" />}
+        />
       </div>
 
       <nav className="flex-1 py-4 overflow-y-auto space-y-1 px-3">
@@ -67,18 +76,38 @@ export function Sidebar({ isOpen, toggle }: { isOpen: boolean; toggle: () => voi
                <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-white shrink-0">
                  <UserIcon className="w-4 h-4" />
                </div>
-               <span className="text-sm font-medium text-white truncate">
-                 {user?.name || 'Vendedor'}
-               </span>
+               <div className="flex flex-col min-w-0">
+                 <span className="text-sm font-medium text-white truncate">
+                   {user?.name || user?.email?.split('@')[0] || 'Usuário'}
+                 </span>
+                 <span className="text-xs text-white/70">
+                   {isAdmin ? 'Administrador' : 'Colaborador'}
+                 </span>
+               </div>
             </div>
-            <Button type="text" onClick={logout} title="Sair" className="text-white hover:!bg-white/20 hover:!text-white shrink-0 flex items-center justify-center p-0 w-8 h-8" icon={<LogOut className="w-5 h-5" color="white" />} />
+            <Button
+              type="text"
+              onClick={logout}
+              title="Sair"
+              className="text-white hover:!bg-white/20 hover:!text-white shrink-0 flex items-center justify-center p-0 w-8 h-8"
+              icon={<LogOut className="w-5 h-5" color="white" />}
+            />
           </div>
         ) : (
           <div className="flex flex-col gap-4 items-center">
-            <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-white shrink-0 cursor-pointer" title={user?.name || 'Vendedor'}>
+            <div
+              className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-white shrink-0 cursor-pointer"
+              title={`${user?.name || 'Usuário'} (${isAdmin ? 'Admin' : 'Colab'})`}
+            >
               <UserIcon className="w-4 h-4" />
             </div>
-            <Button type="text" onClick={logout} title="Sair" className="text-white hover:!bg-white/20 hover:!text-white shrink-0 flex items-center justify-center p-0 w-8 h-8" icon={<LogOut className="w-5 h-5" color="white" />} />
+            <Button
+              type="text"
+              onClick={logout}
+              title="Sair"
+              className="text-white hover:!bg-white/20 hover:!text-white shrink-0 flex items-center justify-center p-0 w-8 h-8"
+              icon={<LogOut className="w-5 h-5" color="white" />}
+            />
           </div>
         )}
       </div>

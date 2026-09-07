@@ -7,6 +7,8 @@ import { Customers } from '@/pages/Customers';
 import { Entrada } from '@/pages/Entrada';
 import { Planilha } from '@/pages/Planilha';
 import { Pesquisa } from '@/pages/Pesquisa';
+import { MyProfile } from '@/pages/MyProfile';
+import { SystemSettings } from '@/pages/SystemSettings';
 import { useAuthStore } from '@/store/useAuth';
 
 /** Redireciona para /login se não autenticado. */
@@ -49,6 +51,7 @@ export function AppRoutes() {
         <Route path="inbounds" element={<Navigate to="/entrada" replace />} />
         <Route path="planilha" element={<Planilha />} />
         <Route path="clientes" element={<Customers />} />
+        <Route path="meus-dados" element={<MyProfile />} />
 
         {/* Rotas Exclusivas do Administrador */}
         <Route
@@ -64,6 +67,14 @@ export function AppRoutes() {
           element={
             <AdminRoute>
               <Pesquisa />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="definicoes"
+          element={
+            <AdminRoute>
+              <SystemSettings />
             </AdminRoute>
           }
         />

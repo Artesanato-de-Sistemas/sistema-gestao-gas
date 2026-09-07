@@ -230,7 +230,7 @@ export function Dashboard() {
             ) : (
               Object.entries(data.resumo_sangrias.por_tipo).map(([tipo, valor]) => (
                 <Tag key={tipo} color="orange" className="text-xs py-1 px-2.5 rounded-lg">
-                  <strong>{tipo}:</strong> {formatCurrency(valor)}
+                  <strong>{tipo}:</strong> {formatCurrency(Number(valor))}
                 </Tag>
               ))
             )}

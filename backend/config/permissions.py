@@ -30,12 +30,17 @@ class AuthenticatedUser:
 
     def __init__(self, data: dict) -> None:
         self.id: str = str(data.get("id") or data.get("sub") or "")
-        self.email: str = data.get("email", "")
+        raw_email = data.get("email", "")
+        self.email: str = raw_email
+        self.username: str = str(
+            data.get("username") or data.get("login") or (raw_email.split("@")[0] if "@" in raw_email else raw_email)
+        )
+        self.login: str = self.username
         self.name: str = data.get("name", "")
         self.role: str = str(data.get("role", "COLABORADOR")).upper()
 
     def __str__(self) -> str:
-        return f"{self.email} ({self.role})"
+        return f"{self.login} ({self.role})"
 
 
 class SupabaseJWTAuthentication(BaseAuthentication):
@@ -67,9 +72,12 @@ class SupabaseJWTAuthentication(BaseAuthentication):
                 options={"verify_signature": False},  # Tolera chaves rotacionadas em dev
             )
 
+            raw_email = payload.get("email", "")
             user_data = {
                 "id": payload.get("id") or payload.get("sub", ""),
-                "email": payload.get("email", ""),
+                "username": payload.get("username") or payload.get("login") or (raw_email.split("@")[0] if "@" in raw_email else raw_email),
+                "login": payload.get("login") or payload.get("username") or (raw_email.split("@")[0] if "@" in raw_email else raw_email),
+                "email": raw_email,
                 "name": payload.get("name", ""),
                 "role": payload.get("role", "COLABORADOR"),
             }

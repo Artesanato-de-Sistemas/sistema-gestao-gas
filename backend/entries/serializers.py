@@ -1,6 +1,7 @@
 # backend/entries/serializers.py
 from rest_framework import serializers
 
+
 class OrderEntrySerializer(serializers.Serializer):
     client_id = serializers.UUIDField()
     product = serializers.CharField()

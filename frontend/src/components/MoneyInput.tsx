@@ -1,4 +1,5 @@
 // frontend/src/components/MoneyInput.tsx
+import React from 'react';
 import { Input, InputProps } from 'antd';
 import { maskCurrencyInput, parseCurrencyValue } from '@/utils/masks';
 

@@ -2,7 +2,9 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  role: 'ADMIN' | 'COLABORADOR';
+  username?: string;
+  login?: string;
+  role: 'ADMIN' | 'COLABORADOR' | 'VENDEDOR';
 }
 
 export interface Product {

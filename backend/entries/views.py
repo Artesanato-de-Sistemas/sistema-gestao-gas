@@ -1,219 +1,434 @@
-# backend/entries/views.py
 import logging
-import traceback
-from datetime import datetime
-from decimal import Decimal
+
+from django.utils import timezone
 from rest_framework import status, viewsets
-from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from config.permissions import IsColaborador
 from config.supabase_client import supabase
+from inventory.services import deduct_stock_fifo
 
 logger = logging.getLogger(__name__)
 
-class EntryViewSet(viewsets.ViewSet):
-    """
-    ViewSet para gerenciar entradas do dia (vendas, pagamentos, sangrias)
-    """
-    
-    @action(detail=False, methods=['get'], url_path='check')
-    def check_entry(self, request):
-        """
-        Verifica se já existe entrada para um funcionário em uma data específica.
-        Query params: driver_id, date (YYYY-MM-DD)
-        """
-        driver_id = request.query_params.get('driver_id')
-        date = request.query_params.get('date')
-        
-        if not driver_id or not date:
-            return Response({"error": "driver_id e date são obrigatórios"}, status=400)
-        
+
+class PagamentoViewSet(viewsets.ViewSet):
+    permission_classes = [IsColaborador]
+
+    def list(self, request):
+        if not supabase:
+            return Response({"error": "Supabase não configurado."}, status=500)
         try:
-            # Verificar se há vendas para este funcionário nesta data
-            orders_res = (
-                supabase.table("orders")
-                .select("id")
-                .eq("delivery_driver_id", driver_id)
-                .eq("date", date)
-                .limit(1)
-                .execute()
+            cli_id = request.query_params.get("id_cliente") or request.query_params.get("client_id")
+            date = request.query_params.get("data") or request.query_params.get("date")
+
+            query = (
+                supabase.table("pagamentos")
+                .select("*, clientes(nome), vendas(valor_total)")
+                .order("created_at", desc=True)
             )
-            
-            has_orders = len(orders_res.data) > 0
-            
-            # Verificar se há pagamentos
-            payments_res = (
-                supabase.table("payments")
-                .select("id")
-                .eq("delivery_driver_id", driver_id)
-                .eq("date", date)
-                .limit(1)
-                .execute()
-            )
-            has_payments = len(payments_res.data) > 0
-            
-            # Verificar se há sangrias
-            cash_res = (
-                supabase.table("cash_entries")
-                .select("id")
-                .eq("delivery_driver_id", driver_id)
-                .eq("date", date)
-                .limit(1)
-                .execute()
-            )
-            has_cash = len(cash_res.data) > 0
-            
-            has_entry = has_orders or has_payments or has_cash
-            
-            return Response({
-                "has_entry": has_entry,
-                "has_orders": has_orders,
-                "has_payments": has_payments,
-                "has_cash": has_cash,
-                "message": "Esta data já possui lançamentos para este funcionário" if has_entry else "Nenhum lançamento encontrado"
-            })
-            
+            if cli_id:
+                query = query.eq("id_cliente", cli_id)
+
+            res = query.execute()
+            data = res.data or []
+            if date:
+                data = [p for p in data if (p.get("created_at") or "").startswith(date)]
+
+            for p in data:
+                cli = p.get("clientes") or {}
+                p["cliente_nome"] = cli.get("nome", "Cliente sem nome")
+                p["client_name"] = p["cliente_nome"]
+                p["amount"] = float(p.get("valor") or 0)
+                p["payment_method"] = p.get("forma_pagamento")
+                p["date"] = (p.get("created_at") or "")[:10]
+
+            return Response(data)
         except Exception as e:
-            logger.error(f"ERRO ao verificar entrada: {str(e)}")
             return Response({"error": str(e)}, status=500)
-    
-    @action(detail=False, methods=['post'], url_path='save')
-    def save_entry(self, request):
-        """
-        Salva todas as informações da entrada (vendas, pagamentos, sangrias).
-        Payload esperado:
-        {
-            "driver_id": "uuid",
-            "date": "2026-09-02",
-            "orders": [
-                {
-                    "client_id": "uuid",
-                    "product": "P13 - Gas",
-                    "unit_cost": 94.50,
-                    "quantity": 10,
-                    "payment_form": "DINHEIRO"
-                }
-            ],
-            "payments": [
-                {
-                    "client_id": "uuid",
-                    "amount": 7000.00,
-                    "payment_method": "DINHEIRO",
-                    "notes": "Pagamento do Jeferson"
-                }
-            ],
-            "cash_entries": [
-                {
-                    "type": "SAIDA",
-                    "amount": 25.00,
-                    "description": "Almoço",
-                    "category": "Alimentação"
-                }
-            ]
+
+    def create(self, request):
+        if not supabase:
+            return Response({"error": "Supabase não configurado."}, status=500)
+        data = request.data
+        id_cliente = data.get("id_cliente") or data.get("client_id")
+        id_venda = data.get("id_venda") or data.get("order_id") or None
+        valor = data.get("valor") or data.get("amount")
+        forma_pagamento = data.get("forma_pagamento") or data.get("payment_method") or "DINHEIRO"
+        created_at = data.get("created_at") or data.get("date")
+
+        if not id_cliente:
+            return Response({"error": "id_cliente é obrigatório."}, status=400)
+        try:
+            val = float(valor)
+            if val <= 0:
+                return Response({"error": "Valor deve ser maior que zero."}, status=400)
+        except (ValueError, TypeError):
+            return Response({"error": "Valor inválido."}, status=400)
+
+        payload = {
+            "id_cliente": id_cliente,
+            "id_venda": id_venda,
+            "valor": val,
+            "forma_pagamento": forma_pagamento,
         }
+        if created_at:
+            payload["created_at"] = created_at
+
+        try:
+            res = supabase.table("pagamentos").insert(payload).execute()
+            if not res.data:
+                return Response({"error": "Falha ao registrar pagamento."}, status=500)
+            return Response(res.data[0], status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+    def destroy(self, request, pk=None):
+        if not (request.user and getattr(request.user, "role", None) == "ADMIN"):
+            return Response({"error": "Apenas administradores podem excluir pagamentos."}, status=403)
+        if not supabase:
+            return Response({"error": "Supabase não configurado."}, status=500)
+        try:
+            supabase.table("pagamentos").delete().eq("id", pk).execute()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+
+class SangriaViewSet(viewsets.ViewSet):
+    permission_classes = [IsColaborador]
+
+    def list(self, request):
+        if not supabase:
+            return Response({"error": "Supabase não configurado."}, status=500)
+        try:
+            func_id = request.query_params.get("id_funcionario") or request.query_params.get("driver_id")
+            date = request.query_params.get("data") or request.query_params.get("date")
+
+            query = (
+                supabase.table("sangrias")
+                .select("*, funcionarios(nome)")
+                .order("created_at", desc=True)
+            )
+            if func_id:
+                query = query.eq("id_funcionario", func_id)
+
+            res = query.execute()
+            data = res.data or []
+            if date:
+                data = [s for s in data if (s.get("created_at") or "").startswith(date)]
+
+            for s in data:
+                func = s.get("funcionarios") or {}
+                s["funcionario_nome"] = func.get("nome", "Funcionário")
+                s["driver_name"] = s["funcionario_nome"]
+                s["amount"] = float(s.get("valor") or 0)
+                s["date"] = (s.get("created_at") or "")[:10]
+
+            return Response(data)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+    def create(self, request):
+        if not supabase:
+            return Response({"error": "Supabase não configurado."}, status=500)
+        data = request.data
+        id_funcionario = data.get("id_funcionario") or data.get("delivery_driver_id") or (
+            request.user.id if request.user and request.user.is_authenticated else None
+        )
+        tipo = data.get("tipo") or "SANGRIA"
+        descricao = data.get("descricao") or data.get("description") or "Sangria de caixa"
+        valor = data.get("valor") or data.get("amount")
+        created_at = data.get("created_at") or data.get("date")
+
+        if not id_funcionario:
+            return Response({"error": "id_funcionario é obrigatório."}, status=400)
+        try:
+            val = float(valor)
+            if val <= 0:
+                return Response({"error": "Valor deve ser maior que zero."}, status=400)
+        except (ValueError, TypeError):
+            return Response({"error": "Valor inválido."}, status=400)
+
+        payload = {
+            "id_funcionario": id_funcionario,
+            "tipo": tipo,
+            "descricao": descricao,
+            "valor": val,
+        }
+        if created_at:
+            payload["created_at"] = created_at
+
+        try:
+            res = supabase.table("sangrias").insert(payload).execute()
+            if not res.data:
+                return Response({"error": "Falha ao registrar sangria."}, status=500)
+            return Response(res.data[0], status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+    def destroy(self, request, pk=None):
+        if not (request.user and getattr(request.user, "role", None) == "ADMIN"):
+            return Response({"error": "Apenas administradores podem excluir sangrias."}, status=403)
+        if not supabase:
+            return Response({"error": "Supabase não configurado."}, status=500)
+        try:
+            supabase.table("sangrias").delete().eq("id", pk).execute()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+
+class PlanilhaView(APIView):
+    """
+    Endpoint consolidado para consulta da planilha diária e fechamento do dia.
+    Compatível com os parâmetros e estado da tela Planilha.
+    """
+    permission_classes = [IsColaborador]
+
+    def get(self, request):
+        if not supabase:
+            return Response({"error": "Supabase não configurado."}, status=500)
+
+        driver_id = request.query_params.get("driver_id") or request.query_params.get("id_funcionario")
+        raw_date = request.query_params.get("date") or request.query_params.get("data")
+        date_param = raw_date or timezone.now().strftime("%Y-%m-%d")
+
+        try:
+            # 1. Vendas do dia
+            vendas_q = (
+                supabase.table("vendas")
+                .select("*, clientes(nome), funcionarios(nome), itens_venda(*, produtos(nome))")
+                .is_("deleted_at", "null")
+                .order("created_at")
+            )
+            if driver_id:
+                vendas_q = vendas_q.eq("id_funcionario", driver_id)
+            vendas_all = vendas_q.execute().data or []
+            vendas = [v for v in vendas_all if (v.get("created_at") or "").startswith(date_param)]
+
+            for v in vendas:
+                cli = v.get("clientes") or {}
+                func = v.get("funcionarios") or {}
+                v["client_name"] = cli.get("nome", "Cliente")
+                v["cliente_nome"] = v["client_name"]
+                v["driver_name"] = func.get("nome")
+                v["total_amount"] = float(v.get("valor_total") or 0)
+                # Resumo de produto e forma de pagamento se houver itens
+                items = v.get("itens_venda") or []
+                if items:
+                    v["product"] = ", ".join(
+                        i.get("produtos", {}).get("nome", "Gás") for i in items if i.get("produtos")
+                    )
+                    v["quantity"] = sum(int(i.get("quantidade") or 0) for i in items)
+                    v["unit_cost"] = float(items[0].get("valor_unitario") or 0)
+
+            # 2. Pagamentos do dia
+            pag_q = supabase.table("pagamentos").select("*, clientes(nome)").order("created_at")
+            pag_all = pag_q.execute().data or []
+            pagamentos = [p for p in pag_all if (p.get("created_at") or "").startswith(date_param)]
+            for p in pagamentos:
+                cli = p.get("clientes") or {}
+                p["client_name"] = cli.get("nome", "Cliente")
+                p["cliente_nome"] = p["client_name"]
+                p["amount"] = float(p.get("valor") or 0)
+                p["payment_method"] = p.get("forma_pagamento")
+                p["date"] = (p.get("created_at") or "")[:10]
+
+            # 3. Sangrias do dia
+            sang_q = supabase.table("sangrias").select("*, funcionarios(nome)").order("created_at")
+            if driver_id:
+                sang_q = sang_q.eq("id_funcionario", driver_id)
+            sang_all = sang_q.execute().data or []
+            sangrias = [s for s in sang_all if (s.get("created_at") or "").startswith(date_param)]
+            for s in sangrias:
+                func = s.get("funcionarios") or {}
+                s["driver_name"] = func.get("nome")
+                s["amount"] = float(s.get("valor") or 0)
+                s["description"] = s.get("descricao")
+                s["type"] = "SAIDA"
+                s["date"] = (s.get("created_at") or "")[:10]
+
+            # 4. Saídas de estoque do dia
+            saidas_q = supabase.table("saidas").select("*, produtos(nome)").order("created_at")
+            saidas_all = saidas_q.execute().data or []
+            saidas = [s for s in saidas_all if (s.get("created_at") or "").startswith(date_param)]
+
+            # 5. Cálculo dos Totais
+            totals = {
+                "DINHEIRO": 0.0,
+                "PIX": 0.0,
+                "CREDITO": 0.0,
+                "DEBITO": 0.0,
+                "CHEQUE": 0.0,
+                "A_PRAZO": 0.0,
+                "TOTAL_VENDAS": 0.0,
+                "TOTAL_PAGAMENTOS": 0.0,
+                "TOTAL_SANGRIAS": 0.0,
+                "SALDO_CAIXA": 0.0,
+                "TOTAL": 0.0,
+            }
+
+            for v in vendas:
+                totals["TOTAL_VENDAS"] += v["total_amount"]
+
+            for p in pagamentos:
+                m = str(p.get("forma_pagamento", "DINHEIRO")).upper()
+                amt = float(p.get("valor") or 0)
+                totals["TOTAL_PAGAMENTOS"] += amt
+                if "PIX" in m:
+                    totals["PIX"] += amt
+                elif "CREDITO" in m or "CRÉDITO" in m:
+                    totals["CREDITO"] += amt
+                elif "DEBITO" in m or "DÉBITO" in m:
+                    totals["DEBITO"] += amt
+                elif "CHEQUE" in m:
+                    totals["CHEQUE"] += amt
+                else:
+                    totals["DINHEIRO"] += amt
+                totals["TOTAL"] += amt
+
+            for s in sangrias:
+                totals["TOTAL_SANGRIAS"] += float(s.get("valor") or 0)
+
+            totals["SALDO_CAIXA"] = round(totals["TOTAL_PAGAMENTOS"] - totals["TOTAL_SANGRIAS"], 2)
+            totals["TOTAL_VENDAS"] = round(totals["TOTAL_VENDAS"], 2)
+            totals["TOTAL_PAGAMENTOS"] = round(totals["TOTAL_PAGAMENTOS"], 2)
+            totals["TOTAL_SANGRIAS"] = round(totals["TOTAL_SANGRIAS"], 2)
+
+            return Response({
+                "vendas": vendas,
+                "orders": vendas,
+                "pagamentos": pagamentos,
+                "payments": pagamentos,
+                "sangrias": sangrias,
+                "cash_entries": sangrias,
+                "saidas": saidas,
+                "totals": totals,
+            })
+        except Exception as e:
+            logger.error(f"Erro ao buscar dados da planilha: {e}")
+            return Response({"error": str(e)}, status=500)
+
+    def post(self, request):
+        """
+        Salva lote de vendas, pagamentos e sangrias do fechamento diário da planilha.
         """
         if not supabase:
             return Response({"error": "Supabase não configurado."}, status=500)
-        
-        driver_id = request.data.get('driver_id')
-        date = request.data.get('date')
-        orders_data = request.data.get('orders', [])
-        payments_data = request.data.get('payments', [])
-        cash_data = request.data.get('cash_entries', [])
-        
+
+        data = request.data
+        driver_id = data.get("driver_id") or data.get("id_funcionario")
+        date = data.get("date") or data.get("data") or timezone.now().strftime("%Y-%m-%d")
+        orders_data = data.get("orders") or data.get("vendas") or []
+        payments_data = data.get("payments") or data.get("pagamentos") or []
+        cash_data = data.get("cash_entries") or data.get("sangrias") or []
+
         if not driver_id:
-            return Response({"error": "driver_id é obrigatório"}, status=400)
-        if not date:
-            return Response({"error": "date é obrigatório"}, status=400)
-        
-        try:
-            # Validar data
-            datetime.strptime(date, '%Y-%m-%d')
-        except ValueError:
-            return Response({"error": "date deve estar no formato YYYY-MM-DD"}, status=400)
-        
-        # Verificar se já existe entrada para este funcionário/data
-        try:
-            orders_check = supabase.table("orders").select("id").eq("delivery_driver_id", driver_id).eq("date", date).limit(1).execute()
-            payments_check = supabase.table("payments").select("id").eq("delivery_driver_id", driver_id).eq("date", date).limit(1).execute()
-            cash_check = supabase.table("cash_entries").select("id").eq("delivery_driver_id", driver_id).eq("date", date).limit(1).execute()
-            
-            if len(orders_check.data) > 0 or len(payments_check.data) > 0 or len(cash_check.data) > 0:
-                return Response({
-                    "error": "Já existem lançamentos para este funcionário nesta data. Não é possível adicionar mais."
-                }, status=400)
-        except Exception as e:
-            logger.error(f"ERRO ao verificar entrada existente: {str(e)}")
-        
-        saved_data = {
-            "orders": [],
-            "payments": [],
-            "cash_entries": []
+            return Response({"error": "Funcionário é obrigatório."}, status=400)
+
+        saved = {
+            "vendas": [],
+            "pagamentos": [],
+            "sangrias": [],
         }
-        
+
         try:
-            # 1. Salvar ORDERS (vendas)
-            for order in orders_data:
-                quantity = int(order.get('quantity', 0))
-                unit_cost = float(order.get('unit_cost', 0))
-                total_amount = quantity * unit_cost
-                payment_form = order.get('payment_form')
-                payment_received = total_amount if payment_form != 'A PRAZO (VENDA)' else 0
-                
-                order_payload = {
-                    "client_id": order.get('client_id'),
-                    "delivery_driver_id": driver_id,
-                    "date": date,
-                    "product": order.get('product'),
-                    "unit_cost": unit_cost,
-                    "quantity": quantity,
-                    "payment_form": payment_form,
-                    "payment_received": payment_received,
-                    "total_amount": total_amount,
-                    "status": "ENTREGUE"
-                }
-                
-                result = supabase.table("orders").insert(order_payload).execute()
-                if result.data:
-                    saved_data["orders"].append(result.data[0])
-            
-            # 2. Salvar PAYMENTS (pagamentos)
-            for payment in payments_data:
-                payment_payload = {
-                    "client_id": payment.get('client_id'),
-                    "delivery_driver_id": driver_id,
-                    "date": date,
-                    "amount": float(payment.get('amount', 0)),
-                    "payment_method": payment.get('payment_method'),
-                    "notes": payment.get('notes', ''),
-                    "order_id": payment.get('order_id')  # Opcional
-                }
-                
-                result = supabase.table("payments").insert(payment_payload).execute()
-                if result.data:
-                    saved_data["payments"].append(result.data[0])
-            
-            # 3. Salvar CASH_ENTRIES (sangrias)
-            for cash in cash_data:
-                cash_payload = {
-                    "delivery_driver_id": driver_id,
-                    "date": date,
-                    "type": cash.get('type'),
-                    "amount": float(cash.get('amount', 0)),
-                    "description": cash.get('description', ''),
-                    "category": cash.get('category', '')
-                }
-                
-                result = supabase.table("cash_entries").insert(cash_payload).execute()
-                if result.data:
-                    saved_data["cash_entries"].append(result.data[0])
-            
+            # 1. Salvar vendas
+            for o in orders_data:
+                cid = o.get("client_id") or o.get("id_cliente")
+                pid = o.get("id_produto")
+                if not pid and o.get("product"):
+                    p_query = supabase.table("produtos").select("id").ilike("nome", f"%{o['product']}%").limit(1)
+                    p_res = p_query.execute()
+                    if p_res.data:
+                        pid = p_res.data[0]["id"]
+
+                qty = int(o.get("quantity") or o.get("quantidade") or 1)
+                unit_cost = float(o.get("unit_cost") or o.get("valor_unitario") or 0)
+                tot = qty * unit_cost
+
+                if cid and pid:
+                    # Cria venda
+                    v_res = supabase.table("vendas").insert({
+                        "id_cliente": cid,
+                        "id_funcionario": driver_id,
+                        "valor_total": tot,
+                        "created_at": f"{date}T12:00:00+00:00",
+                    }).execute()
+                    if v_res.data:
+                        v_id = v_res.data[0]["id"]
+                        # Cria item
+                        supabase.table("itens_venda").insert({
+                            "id_venda": v_id,
+                            "id_produto": pid,
+                            "quantidade": qty,
+                            "valor_unitario": unit_cost,
+                            "valor_subtotal": tot,
+                            "created_at": f"{date}T12:00:00+00:00",
+                        }).execute()
+                        # Baixa FIFO
+                        try:
+                            deduct_stock_fifo(pid, qty, venda_id=v_id, tipo="VENDA")
+                        except Exception as ex:
+                            logger.warning(f"Aviso de baixa de estoque na venda: {ex}")
+
+                        # Pagamento automático se forma não for a prazo
+                        form = o.get("payment_form") or o.get("forma_pagamento")
+                        if form and form != "A PRAZO (VENDA)":
+                            supabase.table("pagamentos").insert({
+                                "id_venda": v_id,
+                                "id_cliente": cid,
+                                "valor": tot,
+                                "forma_pagamento": form,
+                                "created_at": f"{date}T12:00:00+00:00",
+                            }).execute()
+
+                        saved["vendas"].append(v_res.data[0])
+
+            # 2. Salvar pagamentos avulsos
+            for p in payments_data:
+                cid = p.get("client_id") or p.get("id_cliente")
+                amt = float(p.get("amount") or p.get("valor") or 0)
+                method = p.get("payment_method") or p.get("forma_pagamento") or "DINHEIRO"
+                order_id = p.get("order_id") or p.get("id_venda") or None
+                if cid and amt > 0:
+                    res_p = supabase.table("pagamentos").insert({
+                        "id_cliente": cid,
+                        "id_venda": order_id,
+                        "valor": amt,
+                        "forma_pagamento": method,
+                        "created_at": f"{date}T12:00:00+00:00",
+                    }).execute()
+                    if res_p.data:
+                        saved["pagamentos"].append(res_p.data[0])
+
+            # 3. Salvar sangrias
+            for c in cash_data:
+                amt = float(c.get("amount") or c.get("valor") or 0)
+                desc = c.get("description") or c.get("descricao") or "Sangria"
+                tipo = c.get("category") or c.get("tipo") or "SAIDA"
+                if amt > 0:
+                    res_s = supabase.table("sangrias").insert({
+                        "id_funcionario": driver_id,
+                        "tipo": tipo,
+                        "descricao": desc,
+                        "valor": amt,
+                        "created_at": f"{date}T12:00:00+00:00",
+                    }).execute()
+                    if res_s.data:
+                        saved["sangrias"].append(res_s.data[0])
+
+            msg = (
+                f"Planilha salva com sucesso! {len(saved['vendas'])} vendas, "
+                f"{len(saved['pagamentos'])} pagamentos, {len(saved['sangrias'])} sangrias."
+            )
             return Response({
                 "success": True,
-                "message": f"Entrada salva com sucesso! {len(saved_data['orders'])} vendas, {len(saved_data['payments'])} pagamentos, {len(saved_data['cash_entries'])} movimentações.",
-                "data": saved_data
+                "message": msg,
+                "data": saved,
             }, status=status.HTTP_201_CREATED)
-            
+
         except Exception as e:
-            logger.error(f"ERRO ao salvar entrada: {str(e)}")
-            logger.error(traceback.format_exc())
+            logger.error(f"Erro ao salvar planilha: {e}")
             return Response({"error": str(e)}, status=500)

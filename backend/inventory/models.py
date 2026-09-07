@@ -3,29 +3,43 @@ import uuid
 from django.db import models
 
 
-class Product(models.Model):
+class Produto(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.TextField()
-    category = models.TextField(null=True, blank=True)
-    current_price = models.DecimalField(max_digits=10, decimal_places=2, default=0, null=True, blank=True)
-    stock_quantity = models.IntegerField(default=0, null=True, blank=True)
-    active = models.BooleanField(default=True, null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
-    updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
+    nome = models.TextField()
+    categoria = models.TextField(null=True, blank=True)
+    valor_padrao = models.DecimalField(max_digits=10, decimal_places=2)
+    ativo = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         managed = False
-        db_table = "products"
+        db_table = "produtos"
 
 
-class StockMovement(models.Model):
+class Entrada(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, db_column="product_id", null=True, blank=True)
-    movement_type = models.TextField()
-    quantity = models.IntegerField()
-    notes = models.TextField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+    id_produto = models.UUIDField()
+    quantidade_inicial = models.IntegerField()
+    quantidade_atual = models.IntegerField()
+    placa_caminhao = models.TextField(null=True, blank=True)
+    lote_nf = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         managed = False
-        db_table = "stock_movements"
+        db_table = "entradas"
+
+
+class Saida(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id_entrada = models.UUIDField()
+    id_produto = models.UUIDField()
+    id_venda = models.UUIDField(null=True, blank=True)
+    tipo = models.TextField()
+    quantidade = models.IntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = False
+        db_table = "saidas"

@@ -20,12 +20,12 @@ from config.supabase_client import supabase
 SEED_USERS = [
     {
         "email": "admin@teste.com",
-        "password": "123456",  # noqa: S106
+        "password": "123456",
         "profile": {"email": "admin@teste.com", "name": "Admin Teste", "role": "ADMIN"},
     },
     {
         "email": "colaborador@teste.com",
-        "password": "123456",  # noqa: S106
+        "password": "123456",
         "profile": {"email": "colaborador@teste.com", "name": "Colaborador Teste", "role": "COLABORADOR"},
     },
 ]

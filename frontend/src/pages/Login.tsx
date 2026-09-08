@@ -25,6 +25,7 @@ export function Login() {
     setLoading(true);
     try {
       const res = await api.post('/auth/login/', {
+        email: cleanUsername,
         username: cleanUsername,
         password,
       });

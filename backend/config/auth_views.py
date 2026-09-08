@@ -1,12 +1,16 @@
+import logging
 from datetime import datetime, timedelta, timezone
 
 import jwt
 from django.conf import settings
-from rest_framework import status
+from rest_framework import serializers, status
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from config.supabase_client import supabase
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Backdoor de desenvolvimento local (caso Supabase offline)
@@ -43,69 +47,113 @@ _LOCAL_USERS = {
 }
 
 
+class LoginSerializer(serializers.Serializer):
+    """
+    Validador de entrada para login.
+    Suporta tanto 'email' quanto 'username'/'login' e tanto 'password' quanto 'senha'.
+    """
+
+    email = serializers.CharField(required=False, allow_blank=True)
+    username = serializers.CharField(required=False, allow_blank=True)
+    login = serializers.CharField(required=False, allow_blank=True)
+    password = serializers.CharField(required=False, allow_blank=True)
+    senha = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        identifier = (attrs.get("email") or attrs.get("username") or attrs.get("login") or "").strip()
+        pwd = str(attrs.get("password") or attrs.get("senha") or "").strip()
+
+        errors = {}
+        if not identifier and not pwd:
+            errors["detail"] = "Os campos de e-mail/usuário e senha são obrigatórios."
+            errors["email"] = ["O campo de e-mail ou usuário é obrigatório."]
+            errors["password"] = ["O campo senha é obrigatório."]
+        elif not identifier:
+            errors["detail"] = "O campo de e-mail ou usuário é obrigatório."
+            errors["email"] = ["O campo de e-mail ou usuário é obrigatório."]
+        elif not pwd:
+            errors["detail"] = "O campo senha é obrigatório."
+            errors["password"] = ["O campo senha é obrigatório."]
+
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        attrs["email"] = identifier
+        attrs["password"] = pwd
+        return attrs
+
+
 class LoginView(APIView):
     authentication_classes = []
     permission_classes = []
+    serializer_class = LoginSerializer
+
+    def get_authenticate_header(self, request):
+        return "Bearer"
 
     def post(self, request):
-        login_input = (
-            request.data.get("username")
-            or request.data.get("login")
-            or request.data.get("email")
-            or ""
-        ).strip().lower()
-        password = str(request.data.get("password") or request.data.get("senha") or "")
+        serializer = self.serializer_class(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        if not login_input or not password:
-            return Response(
-                {"error": "Usuário e senha são obrigatórios."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        email = serializer.validated_data["email"]
+        password = serializer.validated_data["password"]
 
         user_data = None
 
-        # 1. Tenta autenticar na tabela public.funcionarios do Supabase
+        # 1. Consulta no Supabase na tabela 'funcionarios'
         if supabase:
             try:
-                # Busca direta por login (case-insensitive)
+                # Consulta direta conforme especificação:
                 res = (
                     supabase.table("funcionarios")
                     .select("*")
-                    .ilike("email", login_input)
+                    .eq("email", email)
+                    .eq("senha", password)
                     .eq("ativo", True)
                     .execute()
                 )
-                
-                # Se não encontrou e o input não tem '@', tenta buscar por prefixo de email antigo (ex: admin -> admin@admin.com)
-                if (not res.data or len(res.data) == 0) and "@" not in login_input:
+
+                # Se não encontrar pelo email exato, tenta ilike (case-insensitive)
+                if not res.data:
                     res = (
                         supabase.table("funcionarios")
                         .select("*")
-                        .ilike("email", f"{login_input}@%")
+                        .ilike("email", email)
+                        .eq("senha", password)
+                        .eq("ativo", True)
+                        .execute()
+                    )
+
+                # Se ainda não encontrar e não contém '@', tenta por prefixo (ex: admin -> admin@admin.com)
+                if (not res.data) and ("@" not in email):
+                    res = (
+                        supabase.table("funcionarios")
+                        .select("*")
+                        .ilike("email", f"{email}@%")
+                        .eq("senha", password)
                         .eq("ativo", True)
                         .execute()
                     )
 
                 if res.data and len(res.data) > 0:
                     func = res.data[0]
-                    # Compara senha cadastrada (suporta texto plano ou hash futuro)
-                    if str(func.get("senha")) == password:
-                        raw_email = func.get("email") or ""
-                        display_login = raw_email.split("@")[0] if "@" in raw_email else raw_email
-                        user_data = {
-                            "id": str(func["id"]),
-                            "username": display_login,
-                            "login": display_login,
-                            "email": raw_email,
-                            "name": func.get("nome") or display_login,
-                            "role": func.get("role", "COLABORADOR").upper(),
-                        }
+                    raw_email = func.get("email") or ""
+                    display_login = raw_email.split("@")[0] if "@" in raw_email else raw_email
+                    user_data = {
+                        "id": str(func["id"]),
+                        "username": display_login,
+                        "login": display_login,
+                        "email": raw_email,
+                        "name": func.get("nome") or display_login,
+                        "role": func.get("role", "COLABORADOR").upper(),
+                    }
             except Exception as e:
-                print(f"[LoginView] Erro ao consultar funcionarios no Supabase: {e}", flush=True)
+                logger.error(f"[LoginView] Erro ao consultar funcionarios no Supabase: {e}")
 
         # 2. Fallback para _LOCAL_USERS se Supabase falhou ou offline
-        if not user_data and login_input in _LOCAL_USERS:
-            local = _LOCAL_USERS[login_input]
+        if not user_data and email.lower() in _LOCAL_USERS:
+            local = _LOCAL_USERS[email.lower()]
             if local["senha"] == password:
                 display_login = local["email"].split("@")[0] if "@" in local["email"] else local["email"]
                 user_data = {
@@ -117,13 +165,11 @@ class LoginView(APIView):
                     "role": local["role"],
                 }
 
+        # 3. Tratamento de erro 401 Unauthorized se não encontrar o usuário
         if not user_data:
-            return Response(
-                {"detail": "Usuário ou senha inválidos."},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
+            raise AuthenticationFailed("Credenciais inválidas. Verifique o usuário e a senha.")
 
-        # 3. Gera JWT assinado
+        # 4. Gera JWT assinado
         exp = datetime.now(timezone.utc) + timedelta(days=7)
         token_payload = {
             "sub": user_data["id"],
@@ -144,4 +190,3 @@ class LoginView(APIView):
                 "user": user_data,
             }
         )
-

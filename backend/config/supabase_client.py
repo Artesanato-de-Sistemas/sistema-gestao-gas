@@ -1,18 +1,107 @@
+import logging
 import os
+import threading
+import time
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
+import httpx
 from rest_framework import status, viewsets
 from rest_framework.response import Response
-from supabase import create_client
+from supabase import ClientOptions, create_client
+
+logger = logging.getLogger(__name__)
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
-supabase = None
-if SUPABASE_URL and SUPABASE_KEY:
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+_local = threading.local()
+
+
+def _make_client():
+    """
+    Cria uma instância isolada do Supabase Client por thread com HTTP/1.1 e retry
+    automático no transporte HTTP. Isso evita colisões de socket e erros WSAEWOULDBLOCK
+    ([WinError 10035] e [WinError 10054]) comuns no Windows ao lidar com requisições concorrentes.
+    """
+    if not (SUPABASE_URL and SUPABASE_KEY):
+        return None
+    transport = httpx.HTTPTransport(retries=3)
+    http_client = httpx.Client(
+        http2=False,
+        timeout=httpx.Timeout(30.0, connect=10.0),
+        transport=transport,
+    )
+    options = ClientOptions(httpx_client=http_client)
+    return create_client(SUPABASE_URL, SUPABASE_KEY, options=options)
+
+
+def get_supabase_client():
+    if not (SUPABASE_URL and SUPABASE_KEY):
+        return None
+    if not hasattr(_local, "client") or _local.client is None:
+        _local.client = _make_client()
+    return _local.client
+
+
+class _TableProxy:
+    """
+    Proxy transparente para consultas PostgREST com retry resiliente
+    contra erros de socket temporários no Windows.
+    """
+
+    def __init__(self, builder):
+        self._builder = builder
+
+    def __getattr__(self, name):
+        attr = getattr(self._builder, name)
+        if callable(attr):
+
+            def wrapper(*args, **kwargs):
+                if name == "execute":
+                    max_attempts = 3
+                    for attempt in range(max_attempts):
+                        try:
+                            return attr(*args, **kwargs)
+                        except (OSError, httpx.RequestError) as e:
+                            if attempt == max_attempts - 1:
+                                logger.error(f"[Supabase] Falha definitiva após {max_attempts} tentativas: {e}")
+                                raise
+                            time.sleep(0.15 * (attempt + 1))
+                res = attr(*args, **kwargs)
+                if hasattr(res, "execute"):
+                    return _TableProxy(res)
+                return res
+
+            return wrapper
+        return attr
+
+
+class _SupabaseProxy:
+    """
+    Proxy global thread-safe para o cliente Supabase.
+    Permite import direto ('from config.supabase_client import supabase')
+    garantindo que cada thread utilize seu próprio socket pool isolado.
+    """
+
+    def table(self, name: str):
+        client = get_supabase_client()
+        if client is None:
+            raise RuntimeError("Supabase client não configurado.")
+        return _TableProxy(client.table(name))
+
+    def __getattr__(self, name: str):
+        client = get_supabase_client()
+        if client is None:
+            raise RuntimeError("Supabase client não configurado.")
+        return getattr(client, name)
+
+    def __bool__(self) -> bool:
+        return bool(SUPABASE_URL and SUPABASE_KEY)
+
+
+supabase = _SupabaseProxy()
 
 
 def _sanitize(data) -> dict:
@@ -44,12 +133,9 @@ class SupabaseViewSet(viewsets.ViewSet):
     """
 
     table_name: str = ""
-    # Subclasses podem declarar serializer_class e queryset para compatibilidade,
-    # mas eles não serão usados na lógica de leitura/escrita.
     serializer_class = None
     queryset = None
 
-    # Campos que nunca devem ser enviados ao Supabase (gerados pelo banco ou FK aninhada)
     READONLY_FIELDS = {"id", "created_at", "updated_at"}
 
     def _clean_payload(self, data: dict) -> dict:

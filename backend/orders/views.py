@@ -18,6 +18,7 @@ class VendaViewSet(viewsets.ViewSet):
     Colaborador pode listar e registrar vendas.
     Admin pode cancelar/excluir.
     """
+
     permission_classes = [IsColaborador]
 
     def list(self, request):
@@ -93,8 +94,10 @@ class VendaViewSet(viewsets.ViewSet):
 
         data = request.data
         id_cliente = data.get("id_cliente") or data.get("client_id")
-        id_funcionario = data.get("id_funcionario") or data.get("delivery_driver_id") or (
-            request.user.id if request.user and request.user.is_authenticated else None
+        id_funcionario = (
+            data.get("id_funcionario")
+            or data.get("delivery_driver_id")
+            or (request.user.id if request.user and request.user.is_authenticated else None)
         )
         itens = data.get("itens") or []
         created_at = data.get("created_at") or data.get("date")
@@ -108,11 +111,13 @@ class VendaViewSet(viewsets.ViewSet):
                 if p_res.data:
                     prod_id = p_res.data[0]["id"]
 
-            itens = [{
-                "id_produto": prod_id,
-                "quantidade": int(data.get("quantity") or data.get("quantidade") or 1),
-                "valor_unitario": float(data.get("unit_cost") or data.get("valor_unitario") or 0),
-            }]
+            itens = [
+                {
+                    "id_produto": prod_id,
+                    "quantidade": int(data.get("quantity") or data.get("quantidade") or 1),
+                    "valor_unitario": float(data.get("unit_cost") or data.get("valor_unitario") or 0),
+                }
+            ]
 
         if not id_cliente:
             return Response({"error": "Cliente é obrigatório."}, status=400)
@@ -143,9 +148,10 @@ class VendaViewSet(viewsets.ViewSet):
                     # Busca nome do produto para mensagem clara
                     prod_info = supabase.table("produtos").select("nome").eq("id", pid).execute()
                     p_nome = prod_info.data[0]["nome"] if prod_info.data else "Produto"
-                    return Response({
-                        "error": f"Estoque insuficiente para '{p_nome}'. Disponível: {disponivel}, Solicitado: {qty}"
-                    }, status=400)
+                    return Response(
+                        {"error": f"Estoque insuficiente para '{p_nome}'. Disponível: {disponivel}, Solicitado: {qty}"},
+                        status=400,
+                    )
         except Exception as e:
             return Response({"error": f"Erro na validação de estoque: {e}"}, status=400)
 
@@ -250,7 +256,7 @@ class VendaViewSet(viewsets.ViewSet):
             # Busca todos os pagamentos vinculados às vendas
             pag_res = supabase.table("pagamentos").select("id_venda, valor").execute()
             pag_map = {}
-            for p in (pag_res.data or []):
+            for p in pag_res.data or []:
                 vid = p.get("id_venda")
                 if vid:
                     pag_map[vid] = pag_map.get(vid, 0.0) + float(p.get("valor") or 0)
@@ -263,22 +269,24 @@ class VendaViewSet(viewsets.ViewSet):
                 saldo = round(tot - pago, 2)
                 if saldo > 0:
                     cli = v.get("clientes") or {}
-                    pendentes.append({
-                        "id": vid,
-                        "id_cliente": v.get("id_cliente"),
-                        "client_id": v.get("id_cliente"),
-                        "client_name": cli.get("nome"),
-                        "cliente_nome": cli.get("nome"),
-                        "total_amount": tot,
-                        "valor_total": tot,
-                        "payment_received": pago,
-                        "valor_pago": pago,
-                        "pending_amount": saldo,
-                        "saldo_pendente": saldo,
-                        "created_at": v.get("created_at"),
-                        "date": (v.get("created_at") or "")[:10],
-                        "itens": v.get("itens_venda") or [],
-                    })
+                    pendentes.append(
+                        {
+                            "id": vid,
+                            "id_cliente": v.get("id_cliente"),
+                            "client_id": v.get("id_cliente"),
+                            "client_name": cli.get("nome"),
+                            "cliente_nome": cli.get("nome"),
+                            "total_amount": tot,
+                            "valor_total": tot,
+                            "payment_received": pago,
+                            "valor_pago": pago,
+                            "pending_amount": saldo,
+                            "saldo_pendente": saldo,
+                            "created_at": v.get("created_at"),
+                            "date": (v.get("created_at") or "")[:10],
+                            "itens": v.get("itens_venda") or [],
+                        }
+                    )
 
             return Response(pendentes)
         except Exception as e:

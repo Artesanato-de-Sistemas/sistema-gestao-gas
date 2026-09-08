@@ -26,14 +26,14 @@ class ClienteViewSet(SupabaseViewSet):
             # 2. Busca totais de vendas por cliente
             vendas_res = supabase.table("vendas").select("id_cliente, valor_total").is_("deleted_at", "null").execute()
             vendas_map = {}
-            for v in (vendas_res.data or []):
+            for v in vendas_res.data or []:
                 cid = str(v.get("id_cliente"))
                 vendas_map[cid] = vendas_map.get(cid, 0.0) + float(v.get("valor_total") or 0)
 
             # 3. Busca totais de pagamentos por cliente
             pagamentos_res = supabase.table("pagamentos").select("id_cliente, valor").execute()
             pagamentos_map = {}
-            for p in (pagamentos_res.data or []):
+            for p in pagamentos_res.data or []:
                 cid = str(p.get("id_cliente"))
                 pagamentos_map[cid] = pagamentos_map.get(cid, 0.0) + float(p.get("valor") or 0)
 
@@ -124,20 +124,13 @@ class ClienteViewSet(SupabaseViewSet):
 
             # 3. Pagamentos do cliente
             pagamentos_res = (
-                supabase.table("pagamentos")
-                .select("*")
-                .eq("id_cliente", pk)
-                .order("created_at", desc=True)
-                .execute()
+                supabase.table("pagamentos").select("*").eq("id_cliente", pk).order("created_at", desc=True).execute()
             )
             pagamentos = pagamentos_res.data or []
 
             # 4. Preços específicos configurados
             precos_res = (
-                supabase.table("valor_cliente")
-                .select("*, produtos(nome, valor_padrao)")
-                .eq("id_cliente", pk)
-                .execute()
+                supabase.table("valor_cliente").select("*, produtos(nome, valor_padrao)").eq("id_cliente", pk).execute()
             )
             precos = precos_res.data or []
 
@@ -145,15 +138,17 @@ class ClienteViewSet(SupabaseViewSet):
             total_pago = sum(float(p.get("valor") or 0) for p in pagamentos)
             saldo_devedor = round(max(0.0, total_vendas - total_pago), 2)
 
-            return Response({
-                "cliente": client,
-                "total_vendas": round(total_vendas, 2),
-                "total_pago": round(total_pago, 2),
-                "saldo_devedor": saldo_devedor,
-                "vendas": vendas,
-                "pagamentos": pagamentos,
-                "precos_especificos": precos,
-            })
+            return Response(
+                {
+                    "cliente": client,
+                    "total_vendas": round(total_vendas, 2),
+                    "total_pago": round(total_pago, 2),
+                    "saldo_devedor": saldo_devedor,
+                    "vendas": vendas,
+                    "pagamentos": pagamentos,
+                    "precos_especificos": precos,
+                }
+            )
         except Exception as e:
             return Response({"error": str(e)}, status=500)
 
@@ -184,11 +179,7 @@ class ClienteViewSet(SupabaseViewSet):
         try:
             # Verifica se já existe preço configurado para esse par (cliente, produto)
             existing = (
-                supabase.table("valor_cliente")
-                .select("id")
-                .eq("id_cliente", pk)
-                .eq("id_produto", id_produto)
-                .execute()
+                supabase.table("valor_cliente").select("id").eq("id_cliente", pk).eq("id_produto", id_produto).execute()
             )
             if existing.data and len(existing.data) > 0:
                 rec_id = existing.data[0]["id"]
@@ -201,11 +192,13 @@ class ClienteViewSet(SupabaseViewSet):
             else:
                 res = (
                     supabase.table("valor_cliente")
-                    .insert({
-                        "id_cliente": pk,
-                        "id_produto": id_produto,
-                        "valor_especifico": float(valor_especifico),
-                    })
+                    .insert(
+                        {
+                            "id_cliente": pk,
+                            "id_produto": id_produto,
+                            "valor_especifico": float(valor_especifico),
+                        }
+                    )
                     .execute()
                 )
             return Response(res.data[0] if res.data else {}, status=status.HTTP_200_OK)

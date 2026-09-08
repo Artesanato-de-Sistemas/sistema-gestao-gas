@@ -19,6 +19,7 @@ class DashboardMetricsView(APIView):
     - Resumo atual de sangria
     - Clientes ativos
     """
+
     permission_classes = [IsAdmin]
 
     def get(self, request):
@@ -41,7 +42,7 @@ class DashboardMetricsView(APIView):
                 .execute()
             )
             stock_map = {}
-            for e in (entries_res.data or []):
+            for e in entries_res.data or []:
                 pid = str(e.get("id_produto"))
                 stock_map[pid] = stock_map.get(pid, 0) + int(e.get("quantidade_atual") or 0)
 
@@ -66,12 +67,14 @@ class DashboardMetricsView(APIView):
 
                 # Alerta se estoque for baixo (<= 10 unidades)
                 if qty <= 10:
-                    alertas_estoque.append({
-                        "id_produto": pid,
-                        "nome": p_nome,
-                        "quantidade": qty,
-                        "critico": qty <= 3,
-                    })
+                    alertas_estoque.append(
+                        {
+                            "id_produto": pid,
+                            "nome": p_nome,
+                            "quantidade": qty,
+                            "critico": qty <= 3,
+                        }
+                    )
 
             alertas_estoque.sort(key=lambda x: x["quantidade"])
 
@@ -81,13 +84,13 @@ class DashboardMetricsView(APIView):
 
             vendas_res = supabase.table("vendas").select("id_cliente, valor_total").is_("deleted_at", "null").execute()
             vendas_map = {}
-            for v in (vendas_res.data or []):
+            for v in vendas_res.data or []:
                 cid = str(v.get("id_cliente"))
                 vendas_map[cid] = vendas_map.get(cid, 0.0) + float(v.get("valor_total") or 0)
 
             pags_res = supabase.table("pagamentos").select("id_cliente, valor").execute()
             pags_map = {}
-            for p in (pags_res.data or []):
+            for p in pags_res.data or []:
                 cid = str(p.get("id_cliente"))
                 pags_map[cid] = pags_map.get(cid, 0.0) + float(p.get("valor") or 0)
 
@@ -101,13 +104,15 @@ class DashboardMetricsView(APIView):
                 debito = round(tot_v - tot_p, 2)
                 if debito > 0.01:
                     total_inadimplente += debito
-                    alertas_inadimplencia.append({
-                        "id_cliente": cid,
-                        "nome": c.get("nome"),
-                        "telefone": c.get("telefone"),
-                        "valor_devido": debito,
-                        "limite_credito": float(c.get("limite_credito") or 0),
-                    })
+                    alertas_inadimplencia.append(
+                        {
+                            "id_cliente": cid,
+                            "nome": c.get("nome"),
+                            "telefone": c.get("telefone"),
+                            "valor_devido": debito,
+                            "limite_credito": float(c.get("limite_credito") or 0),
+                        }
+                    )
 
             alertas_inadimplencia.sort(key=lambda x: x["valor_devido"], reverse=True)
 
@@ -151,29 +156,31 @@ class DashboardMetricsView(APIView):
             vendas_hoje = vendas_hoje_res.data or []
             sales_today = sum(float(v.get("valor_total") or 0) for v in vendas_hoje)
 
-            return Response({
-                "alertas_estoque": alertas_estoque,
-                "alertas_inadimplencia": alertas_inadimplencia,
-                "total_inadimplente": round(total_inadimplente, 2),
-                "inadimplentes_count": len(alertas_inadimplencia),
-                "resumo_sangrias": {
-                    "total_hoje": round(total_sangrias_hoje, 2),
-                    "total_mes": round(total_sangrias_mes, 2),
-                    "por_tipo": por_tipo,
-                    "registros_hoje": sangrias_hoje,
-                },
-                "clientes_ativos": {
-                    "total_cadastrados": total_clientes,
-                    "ativos_30_dias": clientes_ativos_count,
-                },
-                # Compatibilidade legada
-                "stock_p13": stock_p13,
-                "stock_p20": stock_p20,
-                "stock_p45": stock_p45,
-                "sales_today": round(sales_today, 2),
-                "orders_today": len(vendas_hoje),
-                "overdue_invoices": len(alertas_inadimplencia),
-            })
+            return Response(
+                {
+                    "alertas_estoque": alertas_estoque,
+                    "alertas_inadimplencia": alertas_inadimplencia,
+                    "total_inadimplente": round(total_inadimplente, 2),
+                    "inadimplentes_count": len(alertas_inadimplencia),
+                    "resumo_sangrias": {
+                        "total_hoje": round(total_sangrias_hoje, 2),
+                        "total_mes": round(total_sangrias_mes, 2),
+                        "por_tipo": por_tipo,
+                        "registros_hoje": sangrias_hoje,
+                    },
+                    "clientes_ativos": {
+                        "total_cadastrados": total_clientes,
+                        "ativos_30_dias": clientes_ativos_count,
+                    },
+                    # Compatibilidade legada
+                    "stock_p13": stock_p13,
+                    "stock_p20": stock_p20,
+                    "stock_p45": stock_p45,
+                    "sales_today": round(sales_today, 2),
+                    "orders_today": len(vendas_hoje),
+                    "overdue_invoices": len(alertas_inadimplencia),
+                }
+            )
 
         except Exception as e:
             logger.error(f"Erro ao obter métricas do dashboard: {e}")
@@ -185,6 +192,7 @@ class PesquisaEstoqueView(APIView):
     Sub-aba 1: Estoque diário.
     Tudo que tem disponível para o dia, descontando saídas em tempo real.
     """
+
     permission_classes = [IsAdmin]
 
     def get(self, request):
@@ -214,21 +222,21 @@ class PesquisaEstoqueView(APIView):
                     if (e.get("created_at") or "").startswith(data_ref)
                 )
                 saidas_do_dia = sum(
-                    int(s.get("quantidade") or 0)
-                    for s in p_saidas
-                    if (s.get("created_at") or "").startswith(data_ref)
+                    int(s.get("quantidade") or 0) for s in p_saidas if (s.get("created_at") or "").startswith(data_ref)
                 )
 
-                resultado.append({
-                    "id_produto": pid,
-                    "produto": p.get("nome"),
-                    "categoria": p.get("categoria") or "-",
-                    "valor_padrao": float(p.get("valor_padrao") or 0),
-                    "entradas_dia": entradas_do_dia,
-                    "saidas_dia": saidas_do_dia,
-                    "saldo_disponivel": saldo_disponivel,
-                    "data": data_ref,
-                })
+                resultado.append(
+                    {
+                        "id_produto": pid,
+                        "produto": p.get("nome"),
+                        "categoria": p.get("categoria") or "-",
+                        "valor_padrao": float(p.get("valor_padrao") or 0),
+                        "entradas_dia": entradas_do_dia,
+                        "saidas_dia": saidas_do_dia,
+                        "saldo_disponivel": saldo_disponivel,
+                        "data": data_ref,
+                    }
+                )
 
             return Response(resultado)
         except Exception as e:
@@ -240,6 +248,7 @@ class PesquisaFinanceiroView(APIView):
     Sub-aba 2: Financeiro diário.
     Toda a movimentação financeira do dia + balanço + sangria.
     """
+
     permission_classes = [IsAdmin]
 
     def get(self, request):
@@ -255,26 +264,17 @@ class PesquisaFinanceiroView(APIView):
                 .select("*, clientes(nome), funcionarios(nome)")
                 .is_("deleted_at", "null")
                 .execute()
-                .data or []
+                .data
+                or []
             )
             vendas_dia = [v for v in vendas if (v.get("created_at") or "").startswith(data_ref)]
 
             # 2. Pagamentos do dia
-            pags = (
-                supabase.table("pagamentos")
-                .select("*, clientes(nome)")
-                .execute()
-                .data or []
-            )
+            pags = supabase.table("pagamentos").select("*, clientes(nome)").execute().data or []
             pags_dia = [p for p in pags if (p.get("created_at") or "").startswith(data_ref)]
 
             # 3. Sangrias do dia
-            sangrias = (
-                supabase.table("sangrias")
-                .select("*, funcionarios(nome)")
-                .execute()
-                .data or []
-            )
+            sangrias = supabase.table("sangrias").select("*, funcionarios(nome)").execute().data or []
             sangrias_dia = [s for s in sangrias if (s.get("created_at") or "").startswith(data_ref)]
 
             totais_por_forma = {}
@@ -290,17 +290,19 @@ class PesquisaFinanceiroView(APIView):
             total_sangrias = sum(float(s.get("valor") or 0) for s in sangrias_dia)
             balanco_liquido = round(total_recebido - total_sangrias, 2)
 
-            return Response({
-                "data": data_ref,
-                "total_vendas_bruto": round(total_vendas_bruto, 2),
-                "total_recebido": round(total_recebido, 2),
-                "total_sangrias": round(total_sangrias, 2),
-                "balanco_liquido": balanco_liquido,
-                "totais_por_forma": {k: round(v, 2) for k, v in totais_por_forma.items()},
-                "vendas": vendas_dia,
-                "pagamentos": pags_dia,
-                "sangrias": sangrias_dia,
-            })
+            return Response(
+                {
+                    "data": data_ref,
+                    "total_vendas_bruto": round(total_vendas_bruto, 2),
+                    "total_recebido": round(total_recebido, 2),
+                    "total_sangrias": round(total_sangrias, 2),
+                    "balanco_liquido": balanco_liquido,
+                    "totais_por_forma": {k: round(v, 2) for k, v in totais_por_forma.items()},
+                    "vendas": vendas_dia,
+                    "pagamentos": pags_dia,
+                    "sangrias": sangrias_dia,
+                }
+            )
         except Exception as e:
             return Response({"error": str(e)}, status=500)
 
@@ -310,6 +312,7 @@ class PesquisaEntregadoresView(APIView):
     Sub-aba 3: Entregadores / Funcionários.
     Detalhamento diário, semanal, mensal e overall.
     """
+
     permission_classes = [IsAdmin]
 
     def get(self, request):
@@ -351,31 +354,32 @@ class PesquisaEntregadoresView(APIView):
 
                 pedidos_count = len(f_vendas)
                 itens_vendidos = sum(
-                    sum(int(it.get("quantidade") or 0) for it in (v.get("itens_venda") or []))
-                    for v in f_vendas
+                    sum(int(it.get("quantidade") or 0) for it in (v.get("itens_venda") or [])) for v in f_vendas
                 )
                 valor_faturado = sum(float(v.get("valor_total") or 0) for v in f_vendas)
                 valor_sangrias = sum(float(s.get("valor") or 0) for s in f_sangrias)
                 saldo_liquido = round(valor_faturado - valor_sangrias, 2)
                 ticket_medio = round(valor_faturado / pedidos_count, 2) if pedidos_count > 0 else 0.0
 
-                detalhamento.append({
-                    "id_funcionario": fid,
-                    "driverId": fid,
-                    "nome": f.get("nome"),
-                    "driverName": f.get("nome"),
-                    "role": f.get("role"),
-                    "pedidos_count": pedidos_count,
-                    "cylindersSold": itens_vendidos,
-                    "itens_vendidos": itens_vendidos,
-                    "grossAmount": round(valor_faturado, 2),
-                    "valor_faturado": round(valor_faturado, 2),
-                    "withdrawals": round(valor_sangrias, 2),
-                    "valor_sangrias": round(valor_sangrias, 2),
-                    "netProfit": saldo_liquido,
-                    "saldo_liquido": saldo_liquido,
-                    "ticket_medio": ticket_medio,
-                })
+                detalhamento.append(
+                    {
+                        "id_funcionario": fid,
+                        "driverId": fid,
+                        "nome": f.get("nome"),
+                        "driverName": f.get("nome"),
+                        "role": f.get("role"),
+                        "pedidos_count": pedidos_count,
+                        "cylindersSold": itens_vendidos,
+                        "itens_vendidos": itens_vendidos,
+                        "grossAmount": round(valor_faturado, 2),
+                        "valor_faturado": round(valor_faturado, 2),
+                        "withdrawals": round(valor_sangrias, 2),
+                        "valor_sangrias": round(valor_sangrias, 2),
+                        "netProfit": saldo_liquido,
+                        "saldo_liquido": saldo_liquido,
+                        "ticket_medio": ticket_medio,
+                    }
+                )
 
             detalhamento.sort(key=lambda x: x["valor_faturado"], reverse=True)
             return Response(detalhamento)
@@ -388,6 +392,7 @@ class PesquisaAvancadaView(APIView):
     Sub-aba 4: Pesquisa avançada e relatórios completos com exportação.
     Cruza dados de vendas, itens, clientes, funcionários e pagamentos.
     """
+
     permission_classes = [IsAdmin]
 
     def get(self, request):
@@ -422,7 +427,8 @@ class PesquisaAvancadaView(APIView):
             # Filtro opcional por produto nos itens
             if id_produto:
                 vendas = [
-                    v for v in vendas
+                    v
+                    for v in vendas
                     if any(str(it.get("id_produto")) == str(id_produto) for it in (v.get("itens_venda") or []))
                 ]
 
@@ -432,24 +438,30 @@ class PesquisaAvancadaView(APIView):
                 func = v.get("funcionarios") or {}
                 items = v.get("itens_venda") or []
 
-                prods_str = ", ".join(
-                    f"{it.get('produtos', {}).get('nome', 'Item')} ({it.get('quantidade')}x)"
-                    for it in items if it.get("produtos")
-                ) or "Venda sem itens detalhados"
+                prods_str = (
+                    ", ".join(
+                        f"{it.get('produtos', {}).get('nome', 'Item')} ({it.get('quantidade')}x)"
+                        for it in items
+                        if it.get("produtos")
+                    )
+                    or "Venda sem itens detalhados"
+                )
 
                 tot_qtd = sum(int(it.get("quantidade") or 0) for it in items)
 
-                relatorio.append({
-                    "id": v["id"],
-                    "data": (v.get("created_at") or "")[:10],
-                    "hora": (v.get("created_at") or "")[11:16],
-                    "cliente": cli.get("nome", "Desconhecido"),
-                    "telefone": cli.get("telefone", "-"),
-                    "funcionario": func.get("nome", "Desconhecido"),
-                    "produtos": prods_str,
-                    "quantidade_total": tot_qtd,
-                    "valor_total": float(v.get("valor_total") or 0),
-                })
+                relatorio.append(
+                    {
+                        "id": v["id"],
+                        "data": (v.get("created_at") or "")[:10],
+                        "hora": (v.get("created_at") or "")[11:16],
+                        "cliente": cli.get("nome", "Desconhecido"),
+                        "telefone": cli.get("telefone", "-"),
+                        "funcionario": func.get("nome", "Desconhecido"),
+                        "produtos": prods_str,
+                        "quantidade_total": tot_qtd,
+                        "valor_total": float(v.get("valor_total") or 0),
+                    }
+                )
 
             return Response(relatorio)
         except Exception as e:

@@ -25,13 +25,7 @@ class ProdutoViewSet(SupabaseViewSet):
             return Response({"error": "Supabase não configurado."}, status=500)
         try:
             # 1. Busca produtos
-            prods_res = (
-                supabase.table("produtos")
-                .select("*")
-                .eq("ativo", True)
-                .order("nome")
-                .execute()
-            )
+            prods_res = supabase.table("produtos").select("*").eq("ativo", True).order("nome").execute()
             products = prods_res.data or []
 
             # 2. Busca estoque atual por produto através das entradas ativas
@@ -43,7 +37,7 @@ class ProdutoViewSet(SupabaseViewSet):
                 .execute()
             )
             stock_map = {}
-            for e in (entries_res.data or []):
+            for e in entries_res.data or []:
                 pid = str(e.get("id_produto"))
                 stock_map[pid] = stock_map.get(pid, 0) + int(e.get("quantidade_atual") or 0)
 
@@ -89,6 +83,7 @@ class EntradaViewSet(viewsets.ViewSet):
     Colaborador pode listar e registrar novas entradas.
     Admin pode editar e excluir.
     """
+
     permission_classes = [IsColaborador]
 
     def list(self, request):
@@ -159,6 +154,7 @@ class SaidaViewSet(viewsets.ViewSet):
     """
     Listagem e registro de saídas de estoque (avaria, troca ou manual).
     """
+
     permission_classes = [IsColaborador]
 
     def list(self, request):

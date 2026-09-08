@@ -15,7 +15,8 @@ class OrderWorksheetSerializer(serializers.Serializer):
     date = serializers.DateField()
 
     def get_client_name(self, obj):
-        return obj.get('clients', {}).get('name') if obj.get('clients') else None
+        return obj.get("clients", {}).get("name") if obj.get("clients") else None
+
 
 class PaymentWorksheetSerializer(serializers.Serializer):
     id = serializers.UUIDField()
@@ -28,7 +29,8 @@ class PaymentWorksheetSerializer(serializers.Serializer):
     notes = serializers.CharField(required=False, allow_null=True)
 
     def get_client_name(self, obj):
-        return obj.get('clients', {}).get('name') if obj.get('clients') else None
+        return obj.get("clients", {}).get("name") if obj.get("clients") else None
+
 
 class CashEntryWorksheetSerializer(serializers.Serializer):
     id = serializers.UUIDField()
@@ -37,6 +39,7 @@ class CashEntryWorksheetSerializer(serializers.Serializer):
     description = serializers.CharField()
     date = serializers.DateField()
     category = serializers.CharField(required=False, allow_null=True)
+
 
 class OrderItemSerializer(serializers.ModelSerializer):
     class Meta:

@@ -105,11 +105,7 @@ class SangriaViewSet(viewsets.ViewSet):
             func_id = request.query_params.get("id_funcionario") or request.query_params.get("driver_id")
             date = request.query_params.get("data") or request.query_params.get("date")
 
-            query = (
-                supabase.table("sangrias")
-                .select("*, funcionarios(nome)")
-                .order("created_at", desc=True)
-            )
+            query = supabase.table("sangrias").select("*, funcionarios(nome)").order("created_at", desc=True)
             if func_id:
                 query = query.eq("id_funcionario", func_id)
 
@@ -133,8 +129,10 @@ class SangriaViewSet(viewsets.ViewSet):
         if not supabase:
             return Response({"error": "Supabase não configurado."}, status=500)
         data = request.data
-        id_funcionario = data.get("id_funcionario") or data.get("delivery_driver_id") or (
-            request.user.id if request.user and request.user.is_authenticated else None
+        id_funcionario = (
+            data.get("id_funcionario")
+            or data.get("delivery_driver_id")
+            or (request.user.id if request.user and request.user.is_authenticated else None)
         )
         tipo = data.get("tipo") or "SANGRIA"
         descricao = data.get("descricao") or data.get("description") or "Sangria de caixa"
@@ -184,6 +182,7 @@ class PlanilhaView(APIView):
     Endpoint consolidado para consulta da planilha diária e fechamento do dia.
     Compatível com os parâmetros e estado da tela Planilha.
     """
+
     permission_classes = [IsColaborador]
 
     def get(self, request):
@@ -296,16 +295,18 @@ class PlanilhaView(APIView):
             totals["TOTAL_PAGAMENTOS"] = round(totals["TOTAL_PAGAMENTOS"], 2)
             totals["TOTAL_SANGRIAS"] = round(totals["TOTAL_SANGRIAS"], 2)
 
-            return Response({
-                "vendas": vendas,
-                "orders": vendas,
-                "pagamentos": pagamentos,
-                "payments": pagamentos,
-                "sangrias": sangrias,
-                "cash_entries": sangrias,
-                "saidas": saidas,
-                "totals": totals,
-            })
+            return Response(
+                {
+                    "vendas": vendas,
+                    "orders": vendas,
+                    "pagamentos": pagamentos,
+                    "payments": pagamentos,
+                    "sangrias": sangrias,
+                    "cash_entries": sangrias,
+                    "saidas": saidas,
+                    "totals": totals,
+                }
+            )
         except Exception as e:
             logger.error(f"Erro ao buscar dados da planilha: {e}")
             return Response({"error": str(e)}, status=500)
@@ -350,23 +351,31 @@ class PlanilhaView(APIView):
 
                 if cid and pid:
                     # Cria venda
-                    v_res = supabase.table("vendas").insert({
-                        "id_cliente": cid,
-                        "id_funcionario": driver_id,
-                        "valor_total": tot,
-                        "created_at": f"{date}T12:00:00+00:00",
-                    }).execute()
+                    v_res = (
+                        supabase.table("vendas")
+                        .insert(
+                            {
+                                "id_cliente": cid,
+                                "id_funcionario": driver_id,
+                                "valor_total": tot,
+                                "created_at": f"{date}T12:00:00+00:00",
+                            }
+                        )
+                        .execute()
+                    )
                     if v_res.data:
                         v_id = v_res.data[0]["id"]
                         # Cria item
-                        supabase.table("itens_venda").insert({
-                            "id_venda": v_id,
-                            "id_produto": pid,
-                            "quantidade": qty,
-                            "valor_unitario": unit_cost,
-                            "valor_subtotal": tot,
-                            "created_at": f"{date}T12:00:00+00:00",
-                        }).execute()
+                        supabase.table("itens_venda").insert(
+                            {
+                                "id_venda": v_id,
+                                "id_produto": pid,
+                                "quantidade": qty,
+                                "valor_unitario": unit_cost,
+                                "valor_subtotal": tot,
+                                "created_at": f"{date}T12:00:00+00:00",
+                            }
+                        ).execute()
                         # Baixa FIFO
                         try:
                             deduct_stock_fifo(pid, qty, venda_id=v_id, tipo="VENDA")
@@ -376,13 +385,15 @@ class PlanilhaView(APIView):
                         # Pagamento automático se forma não for a prazo
                         form = o.get("payment_form") or o.get("forma_pagamento")
                         if form and form != "A PRAZO (VENDA)":
-                            supabase.table("pagamentos").insert({
-                                "id_venda": v_id,
-                                "id_cliente": cid,
-                                "valor": tot,
-                                "forma_pagamento": form,
-                                "created_at": f"{date}T12:00:00+00:00",
-                            }).execute()
+                            supabase.table("pagamentos").insert(
+                                {
+                                    "id_venda": v_id,
+                                    "id_cliente": cid,
+                                    "valor": tot,
+                                    "forma_pagamento": form,
+                                    "created_at": f"{date}T12:00:00+00:00",
+                                }
+                            ).execute()
 
                         saved["vendas"].append(v_res.data[0])
 
@@ -393,13 +404,19 @@ class PlanilhaView(APIView):
                 method = p.get("payment_method") or p.get("forma_pagamento") or "DINHEIRO"
                 order_id = p.get("order_id") or p.get("id_venda") or None
                 if cid and amt > 0:
-                    res_p = supabase.table("pagamentos").insert({
-                        "id_cliente": cid,
-                        "id_venda": order_id,
-                        "valor": amt,
-                        "forma_pagamento": method,
-                        "created_at": f"{date}T12:00:00+00:00",
-                    }).execute()
+                    res_p = (
+                        supabase.table("pagamentos")
+                        .insert(
+                            {
+                                "id_cliente": cid,
+                                "id_venda": order_id,
+                                "valor": amt,
+                                "forma_pagamento": method,
+                                "created_at": f"{date}T12:00:00+00:00",
+                            }
+                        )
+                        .execute()
+                    )
                     if res_p.data:
                         saved["pagamentos"].append(res_p.data[0])
 
@@ -409,13 +426,19 @@ class PlanilhaView(APIView):
                 desc = c.get("description") or c.get("descricao") or "Sangria"
                 tipo = c.get("category") or c.get("tipo") or "SAIDA"
                 if amt > 0:
-                    res_s = supabase.table("sangrias").insert({
-                        "id_funcionario": driver_id,
-                        "tipo": tipo,
-                        "descricao": desc,
-                        "valor": amt,
-                        "created_at": f"{date}T12:00:00+00:00",
-                    }).execute()
+                    res_s = (
+                        supabase.table("sangrias")
+                        .insert(
+                            {
+                                "id_funcionario": driver_id,
+                                "tipo": tipo,
+                                "descricao": desc,
+                                "valor": amt,
+                                "created_at": f"{date}T12:00:00+00:00",
+                            }
+                        )
+                        .execute()
+                    )
                     if res_s.data:
                         saved["sangrias"].append(res_s.data[0])
 
@@ -423,11 +446,14 @@ class PlanilhaView(APIView):
                 f"Planilha salva com sucesso! {len(saved['vendas'])} vendas, "
                 f"{len(saved['pagamentos'])} pagamentos, {len(saved['sangrias'])} sangrias."
             )
-            return Response({
-                "success": True,
-                "message": msg,
-                "data": saved,
-            }, status=status.HTTP_201_CREATED)
+            return Response(
+                {
+                    "success": True,
+                    "message": msg,
+                    "data": saved,
+                },
+                status=status.HTTP_201_CREATED,
+            )
 
         except Exception as e:
             logger.error(f"Erro ao salvar planilha: {e}")

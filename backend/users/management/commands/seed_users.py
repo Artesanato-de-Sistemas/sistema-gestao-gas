@@ -36,9 +36,9 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         if not supabase:
-            self.stdout.write(self.style.WARNING(
-                "Supabase não configurado. Seed ignorado — use o backdoor local para testes."
-            ))
+            self.stdout.write(
+                self.style.WARNING("Supabase não configurado. Seed ignorado — use o backdoor local para testes.")
+            )
             return
 
         for entry in SEED_USERS:
@@ -47,15 +47,17 @@ class Command(BaseCommand):
 
             # 1) Tenta criar na Auth do Supabase (falha silenciosamente se já existe)
             try:
-                supabase.auth.admin.create_user({
-                    "email": email,
-                    "password": entry["password"],
-                    "email_confirm": True,
-                    "user_metadata": {
-                        "name": entry["profile"]["name"],
-                        "role": entry["profile"]["role"],
-                    },
-                })
+                supabase.auth.admin.create_user(
+                    {
+                        "email": email,
+                        "password": entry["password"],
+                        "email_confirm": True,
+                        "user_metadata": {
+                            "name": entry["profile"]["name"],
+                            "role": entry["profile"]["role"],
+                        },
+                    }
+                )
                 self.stdout.write(f"  ✔ Usuário Auth criado: {email}")
             except Exception as e:
                 msg = str(e)
@@ -64,15 +66,22 @@ class Command(BaseCommand):
                 else:
                     self.stdout.write(self.style.WARNING(f"  ⚠ Auth erro: {e}"))
 
-            # 2) Garante o perfil na tabela user_profiles (upsert por email)
+            # 2) Garante o funcionário na tabela funcionarios (upsert por email)
             try:
-                existing = supabase.table("user_profiles").select("id").eq("email", email).execute()
+                existing = supabase.table("funcionarios").select("id").eq("email", email).execute()
                 if existing.data:
-                    self.stdout.write(f"  ⊙ Profile já existe: {email}")
+                    self.stdout.write(f"  ⊙ Funcionario já existe: {email}")
                 else:
-                    supabase.table("user_profiles").insert(entry["profile"]).execute()
-                    self.stdout.write(f"  ✔ Profile criado: {email}")
+                    payload = {
+                        "email": email,
+                        "nome": entry["profile"]["name"],
+                        "senha": entry["password"],
+                        "role": entry["profile"]["role"],
+                        "ativo": True,
+                    }
+                    supabase.table("funcionarios").insert(payload).execute()
+                    self.stdout.write(f"  ✔ Funcionario criado: {email}")
             except Exception as e:
-                self.stdout.write(self.style.WARNING(f"  ⚠ Profile erro (tabela existe?): {e}"))
+                self.stdout.write(self.style.WARNING(f"  ⚠ Funcionario erro: {e}"))
 
         self.stdout.write(self.style.SUCCESS("Seed de usuários concluído."))

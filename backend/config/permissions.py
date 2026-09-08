@@ -75,8 +75,12 @@ class SupabaseJWTAuthentication(BaseAuthentication):
             raw_email = payload.get("email", "")
             user_data = {
                 "id": payload.get("id") or payload.get("sub", ""),
-                "username": payload.get("username") or payload.get("login") or (raw_email.split("@")[0] if "@" in raw_email else raw_email),
-                "login": payload.get("login") or payload.get("username") or (raw_email.split("@")[0] if "@" in raw_email else raw_email),
+                "username": payload.get("username")
+                or payload.get("login")
+                or (raw_email.split("@")[0] if "@" in raw_email else raw_email),
+                "login": payload.get("login")
+                or payload.get("username")
+                or (raw_email.split("@")[0] if "@" in raw_email else raw_email),
                 "email": raw_email,
                 "name": payload.get("name", ""),
                 "role": payload.get("role", "COLABORADOR"),
@@ -95,11 +99,7 @@ class IsAdmin(BasePermission):
     message = "Acesso restrito a administradores."
 
     def has_permission(self, request, view) -> bool:
-        return bool(
-            request.user
-            and request.user.is_authenticated
-            and getattr(request.user, "role", None) == "ADMIN"
-        )
+        return bool(request.user and request.user.is_authenticated and getattr(request.user, "role", None) == "ADMIN")
 
 
 class IsColaborador(BasePermission):
@@ -121,4 +121,3 @@ class IsColaborador(BasePermission):
         if role in ("COLABORADOR", "VENDEDOR"):
             return request.method in self.ALLOWED_METHODS
         return False
-

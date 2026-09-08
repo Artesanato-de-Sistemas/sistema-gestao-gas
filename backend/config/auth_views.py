@@ -141,12 +141,12 @@ class LoginView(APIView):
                     raw_email = func.get("email") or ""
                     display_login = raw_email.split("@")[0] if "@" in raw_email else raw_email
                     user_data = {
-                        "id": str(func["id"]),
+                        "id": str(func.get("id") or ""),
                         "username": display_login,
                         "login": display_login,
                         "email": raw_email,
                         "name": func.get("nome") or display_login,
-                        "role": func.get("role", "COLABORADOR").upper(),
+                        "role": str(func.get("role") or "COLABORADOR").upper(),
                     }
             except Exception as e:
                 logger.error(f"[LoginView] Erro ao consultar funcionarios no Supabase: {e}")
@@ -154,15 +154,16 @@ class LoginView(APIView):
         # 2. Fallback para _LOCAL_USERS se Supabase falhou ou offline
         if not user_data and email.lower() in _LOCAL_USERS:
             local = _LOCAL_USERS[email.lower()]
-            if local["senha"] == password:
-                display_login = local["email"].split("@")[0] if "@" in local["email"] else local["email"]
+            local_email = local.get("email", "")
+            if local.get("senha") == password:
+                display_login = local_email.split("@")[0] if "@" in local_email else local_email
                 user_data = {
-                    "id": local["id"],
+                    "id": str(local.get("id") or ""),
                     "username": display_login,
                     "login": display_login,
-                    "email": local["email"],
-                    "name": local["name"],
-                    "role": local["role"],
+                    "email": local.get("email", ""),
+                    "name": local.get("name") or display_login,
+                    "role": str(local.get("role") or "COLABORADOR").upper(),
                 }
 
         # 3. Tratamento de erro 401 Unauthorized se não encontrar o usuário

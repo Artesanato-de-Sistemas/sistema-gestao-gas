@@ -79,18 +79,13 @@ class UserViewSet(ViewSet):
             payload["nome"] = nome
 
         # 2. Atualização do Login / Usuário
-        raw_login = (
-            data.get("username")
-            or data.get("login")
-            or data.get("email")
-            or ""
-        ).strip().lower()
+        raw_login = (data.get("username") or data.get("login") or data.get("email") or "").strip().lower()
 
         if raw_login:
             # Validação alfanumérica simples (letras, números, ponto, underscore, traço)
             if not re.match(r"^[a-zA-Z0-9_.-]{3,50}$", raw_login):
                 return Response(
-                    {"error": "O nome de usuário deve conter entre 3 e 50 caracteres alfanuméricos (letras, números, '.', '_', '-')."},
+                    {"error": "O nome de usuário deve conter entre 3 e 50 caracteres alfanuméricos."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -163,12 +158,7 @@ class UserViewSet(ViewSet):
         if not supabase:
             return Response({"error": "Supabase não configurado."}, status=status.HTTP_501_NOT_IMPLEMENTED)
         data = request.data
-        login = (
-            data.get("username")
-            or data.get("login")
-            or data.get("email")
-            or ""
-        ).strip().lower()
+        login = (data.get("username") or data.get("login") or data.get("email") or "").strip().lower()
         nome = (data.get("nome") or data.get("name") or "").strip()
         senha = str(data.get("senha") or data.get("password") or "").strip()
         role = str(data.get("role") or "COLABORADOR").upper()
@@ -177,14 +167,16 @@ class UserViewSet(ViewSet):
             return Response({"error": "Nome e usuário/login são obrigatórios."}, status=status.HTTP_400_BAD_REQUEST)
 
         if not senha:
-            return Response({"error": "A senha é obrigatória na criação do usuário."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "A senha é obrigatória na criação do usuário."}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         if len(senha) < 4:
             return Response({"error": "A senha deve ter pelo menos 4 caracteres."}, status=status.HTTP_400_BAD_REQUEST)
 
         if not re.match(r"^[a-zA-Z0-9_.-]{3,50}$", login):
             return Response(
-                {"error": "O nome de usuário deve conter entre 3 e 50 caracteres alfanuméricos (letras, números, '.', '_', '-')."},
+                {"error": "O nome de usuário deve conter entre 3 e 50 caracteres alfanuméricos."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -246,12 +238,7 @@ class UserViewSet(ViewSet):
         if "nome" in data or "name" in data:
             payload["nome"] = (data.get("nome") or data.get("name") or "").strip()
 
-        login = (
-            data.get("username")
-            or data.get("login")
-            or data.get("email")
-            or ""
-        ).strip().lower()
+        login = (data.get("username") or data.get("login") or data.get("email") or "").strip().lower()
         if login:
             if not re.match(r"^[a-zA-Z0-9_.-]{3,50}$", login):
                 return Response(
@@ -259,7 +246,9 @@ class UserViewSet(ViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             try:
-                check = supabase.table(TABLE).select("id").ilike("email", login).neq("id", pk).eq("ativo", True).execute()
+                check = (
+                    supabase.table(TABLE).select("id").ilike("email", login).neq("id", pk).eq("ativo", True).execute()
+                )
                 if check.data and len(check.data) > 0:
                     return Response({"error": "Este login já está em uso."}, status=status.HTTP_400_BAD_REQUEST)
             except Exception as e:
@@ -275,7 +264,9 @@ class UserViewSet(ViewSet):
             s = str(data.get("senha") or data.get("password") or "").strip()
             if s:
                 if len(s) < 4:
-                    return Response({"error": "A senha deve conter no mínimo 4 caracteres."}, status=status.HTTP_400_BAD_REQUEST)
+                    return Response(
+                        {"error": "A senha deve conter no mínimo 4 caracteres."}, status=status.HTTP_400_BAD_REQUEST
+                    )
                 payload["senha"] = s
 
         if "cpf" in data:
@@ -302,7 +293,7 @@ class UserViewSet(ViewSet):
     def destroy(self, request, pk=None):
         if not supabase:
             return Response({"error": "Supabase não configurado."}, status=status.HTTP_501_NOT_IMPLEMENTED)
-        
+
         # Impede o admin de deletar o próprio usuário
         current_id = getattr(request.user, "id", None)
         if current_id and str(current_id) == str(pk):

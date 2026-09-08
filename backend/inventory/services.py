@@ -51,9 +51,7 @@ def deduct_stock_fifo(product_id: str, quantity: int, venda_id: str | None = Non
     total_available = sum(int(e.get("quantidade_atual", 0)) for e in available_entries)
 
     if total_available < quantity:
-        raise ValueError(
-            f"Estoque insuficiente para o produto. Disponível: {total_available}, Solicitado: {quantity}"
-        )
+        raise ValueError(f"Estoque insuficiente para o produto. Disponível: {total_available}, Solicitado: {quantity}")
 
     remaining_needed = quantity
     created_saidas = []
